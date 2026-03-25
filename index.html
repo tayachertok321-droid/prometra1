@@ -7,6 +7,8 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- API config — copy config.example.js → config.js and add your real key -->
+  <script src="config.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #F4F6FA; font-family: 'Outfit', sans-serif; }
@@ -846,10 +848,13 @@ function SettingsModal({sector,plan,onClose,onSave}){
 }
 
 /* ─── DALL-E IMAGE GENERATION ───────────────────── */
-const OPENAI_KEY = "YOUR_OPENAI_API_KEY_HERE";
+// Key is loaded from config.js (gitignored) via window.OPENAI_KEY
 
 async function generateImage(prompt, sector, platform) {
-  // GitHub Pages has no sandbox restrictions — direct OpenAI call works fine
+  const apiKey = window.OPENAI_KEY;
+  if (!apiKey || apiKey === "YOUR_OPENAI_API_KEY_HERE") {
+    return { url: null, error: "No API key set. Copy config.example.js to config.js and add your OpenAI key." };
+  }
   const size = platform === "tiktok" ? "1024x1792"
     : platform === "instagram" ? "1024x1024"
     : "1792x1024";
@@ -858,7 +863,7 @@ async function generateImage(prompt, sector, platform) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer YOUR_OPENAI_API_KEY_HERE"
+        "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({ model:"dall-e-3", prompt, n:1, size, quality:"standard" })
     });

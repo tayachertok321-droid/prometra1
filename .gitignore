@@ -23,6 +23,9 @@ build/
 .env.local
 .env.*.local
 
+# API keys — never commit this
+config.js
+
 # Logs
 *.log
 npm-debug.log*
