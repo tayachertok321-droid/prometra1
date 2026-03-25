@@ -501,18 +501,31 @@ function Photo({sector, idx, style, alt}){
 }
 
 /* ─── CLAUDE API ─────────────────────────────────── */
+function claudeKey(){
+  const k = window.CLAUDE_KEY;
+  if(k && k !== "YOUR_CLAUDE_API_KEY_HERE") return k;
+  return localStorage.getItem("prometra_claude_key") || "";
+}
+function claudeHeaders(){
+  return {
+    "Content-Type":"application/json",
+    "x-api-key": claudeKey(),
+    "anthropic-version":"2023-06-01",
+    "anthropic-dangerous-direct-browser-access":"true"
+  };
+}
 async function callClaude(sys, msg, max=900){
   const r = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:max,system:sys,messages:[{role:"user",content:msg}]})
+    method:"POST", headers:claudeHeaders(),
+    body:JSON.stringify({model:"claude-sonnet-4-5-20251001",max_tokens:max,system:sys,messages:[{role:"user",content:msg}]})
   });
   const d = await r.json();
   return d.content?.[0]?.text||"";
 }
 async function callClaudeChat(sys, messages, max=400){
   const r = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:max,system:sys,messages})
+    method:"POST", headers:claudeHeaders(),
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:max,system:sys,messages})
   });
   const d = await r.json();
   return d.content?.[0]?.text||"";
@@ -809,12 +822,15 @@ function PostViewer({post,sector,onClose}){
 function SettingsModal({sector,plan,onClose,onSave}){
   const [s,setS]=useState(sector);
   const [p,setP]=useState(plan);
-  const [apiKey,setApiKey]=useState(localStorage.getItem("prometra_openai_key")||"");
-  const [keySaved,setKeySaved]=useState(false);
-  function saveKey(){
-    if(apiKey.trim()){localStorage.setItem("prometra_openai_key",apiKey.trim());}
+  const [openaiKey,setOpenaiKey]=useState(localStorage.getItem("prometra_openai_key")||"");
+  const [claudeKeyVal,setClaudeKeyVal]=useState(localStorage.getItem("prometra_claude_key")||"");
+  const [saved,setSaved]=useState(false);
+  function saveKeys(){
+    if(openaiKey.trim()){localStorage.setItem("prometra_openai_key",openaiKey.trim());}
     else{localStorage.removeItem("prometra_openai_key");}
-    setKeySaved(true);setTimeout(()=>setKeySaved(false),2000);
+    if(claudeKeyVal.trim()){localStorage.setItem("prometra_claude_key",claudeKeyVal.trim());}
+    else{localStorage.removeItem("prometra_claude_key");}
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
   }
   return(
     <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
@@ -823,23 +839,37 @@ function SettingsModal({sector,plan,onClose,onSave}){
           <div style={{fontWeight:800,fontSize:20,color:C.text}}>Account Settings</div>
           <button className="btn" style={{fontSize:11,padding:"5px 10px"}} onClick={onClose}>Close</button>
         </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:4}}>Claude API Key</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Powers all AI text generation — captions, responses, sales agent. Stored in your browser only.</div>
+          <div style={{display:"flex",gap:8}}>
+            <input
+              type="password"
+              placeholder="sk-ant-..."
+              value={claudeKeyVal}
+              onChange={e=>setClaudeKeyVal(e.target.value)}
+              style={{flex:1,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,background:C.s2,color:C.text,outline:"none"}}
+            />
+          </div>
+          {claudeKeyVal&&<div style={{fontSize:11,color:C.green,marginTop:6}}>✓ Key loaded</div>}
+        </div>
         <div style={{marginBottom:24}}>
           <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:4}}>OpenAI API Key</div>
-          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Required for DALL-E image generation. Stored in your browser only — never sent anywhere except OpenAI.</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Required for DALL-E 3 image generation. Stored in your browser only.</div>
           <div style={{display:"flex",gap:8}}>
             <input
               type="password"
               placeholder="sk-proj-..."
-              value={apiKey}
-              onChange={e=>setApiKey(e.target.value)}
+              value={openaiKey}
+              onChange={e=>setOpenaiKey(e.target.value)}
               style={{flex:1,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,background:C.s2,color:C.text,outline:"none"}}
             />
-            <button className="btn-p" style={{padding:"9px 16px",fontSize:13,whiteSpace:"nowrap"}} onClick={saveKey}>
-              {keySaved?"Saved ✓":"Save Key"}
-            </button>
           </div>
-          {apiKey&&<div style={{fontSize:11,color:C.green,marginTop:6}}>✓ Key loaded</div>}
+          {openaiKey&&<div style={{fontSize:11,color:C.green,marginTop:6}}>✓ Key loaded</div>}
         </div>
+        <button className="btn-p" style={{padding:"9px 16px",fontSize:13,marginBottom:24}} onClick={saveKeys}>
+          {saved?"Keys Saved ✓":"Save API Keys"}
+        </button>
         <div className="divider"/>
         <div style={{marginBottom:24}}>
           <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:6}}>Business Niche</div>
@@ -928,7 +958,7 @@ function StudioSection({sector}){
   const [photoSeed,setPhotoSeed]=useState({tiktok:0,instagram:1,facebook:2});
 
   const generate = useCallback(async()=>{
-    setLoading(true);setOutputs({});
+    setLoading(true);
     const results = await Promise.all(Object.keys(PLATFORMS).map(async(platform)=>{
       const p=PLATFORMS[platform];
       const raw = await callClaude(
@@ -987,7 +1017,7 @@ Return exactly: {"caption":"2-4 sentences, no hashtags, ${platform} voice for ${
         </div>
       )}
 
-      {loading&&(
+      {!has&&loading&&(
         <div className="card" style={{textAlign:"center",padding:"48px 24px"}}>
           <div style={{display:"flex",justifyContent:"center",gap:20,marginBottom:20,flexWrap:"wrap"}}>
             {Object.entries(PLATFORMS).map(([k,p])=>(
@@ -1003,6 +1033,7 @@ Return exactly: {"caption":"2-4 sentences, no hashtags, ${platform} voice for ${
 
       {has&&(
         <>
+          {loading&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"9px 14px",background:C.s2,borderRadius:9,border:`1px solid ${C.border}`}}><Spinner size={13} color={C.purple}/><span style={{fontSize:12,color:C.muted}}>Refreshing content...</span></div>}
           <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
             {Object.entries(PLATFORMS).map(([k,p])=>(
               <button key={k} className="btn" onClick={()=>setTab(k)}
@@ -1033,8 +1064,7 @@ Return exactly: {"caption":"2-4 sentences, no hashtags, ${platform} voice for ${
                   {aiImg?.loading&&(
                     <div style={{position:"absolute",inset:0,background:"rgba(255,255,255,0.85)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,backdropFilter:"blur(4px)"}}>
                       <Spinner size={32} color={C.purple}/>
-                      <div style={{fontSize:13,color:C.purple,fontWeight:700}}>DALL-E 3 generating...</div>
-                      <div style={{fontSize:11,color:C.muted}}>~5 seconds</div>
+                      <div style={{fontSize:13,color:C.purple,fontWeight:700}}>Generating image...</div>
                     </div>
                   )}
 
