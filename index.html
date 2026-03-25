@@ -809,6 +809,13 @@ function PostViewer({post,sector,onClose}){
 function SettingsModal({sector,plan,onClose,onSave}){
   const [s,setS]=useState(sector);
   const [p,setP]=useState(plan);
+  const [apiKey,setApiKey]=useState(localStorage.getItem("prometra_openai_key")||"");
+  const [keySaved,setKeySaved]=useState(false);
+  function saveKey(){
+    if(apiKey.trim()){localStorage.setItem("prometra_openai_key",apiKey.trim());}
+    else{localStorage.removeItem("prometra_openai_key");}
+    setKeySaved(true);setTimeout(()=>setKeySaved(false),2000);
+  }
   return(
     <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="modal" style={{maxWidth:700}}>
@@ -816,6 +823,24 @@ function SettingsModal({sector,plan,onClose,onSave}){
           <div style={{fontWeight:800,fontSize:20,color:C.text}}>Account Settings</div>
           <button className="btn" style={{fontSize:11,padding:"5px 10px"}} onClick={onClose}>Close</button>
         </div>
+        <div style={{marginBottom:24}}>
+          <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:4}}>OpenAI API Key</div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Required for DALL-E image generation. Stored in your browser only — never sent anywhere except OpenAI.</div>
+          <div style={{display:"flex",gap:8}}>
+            <input
+              type="password"
+              placeholder="sk-proj-..."
+              value={apiKey}
+              onChange={e=>setApiKey(e.target.value)}
+              style={{flex:1,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:13,background:C.s2,color:C.text,outline:"none"}}
+            />
+            <button className="btn-p" style={{padding:"9px 16px",fontSize:13,whiteSpace:"nowrap"}} onClick={saveKey}>
+              {keySaved?"Saved ✓":"Save Key"}
+            </button>
+          </div>
+          {apiKey&&<div style={{fontSize:11,color:C.green,marginTop:6}}>✓ Key loaded</div>}
+        </div>
+        <div className="divider"/>
         <div style={{marginBottom:24}}>
           <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:6}}>Business Niche</div>
           <div style={{fontSize:13,color:C.muted,marginBottom:12}}>Changing your niche updates all content, reviews, leads, and agent data.</div>
@@ -851,9 +876,11 @@ function SettingsModal({sector,plan,onClose,onSave}){
 // Key is loaded from config.js (gitignored) via window.OPENAI_KEY
 
 async function generateImage(prompt, sector, platform) {
-  const apiKey = window.OPENAI_KEY;
-  if (!apiKey || apiKey === "YOUR_OPENAI_API_KEY_HERE") {
-    return { url: null, error: "No API key set. Copy config.example.js to config.js and add your OpenAI key." };
+  const apiKey = (window.OPENAI_KEY && window.OPENAI_KEY !== "YOUR_OPENAI_API_KEY_HERE")
+    ? window.OPENAI_KEY
+    : localStorage.getItem("prometra_openai_key");
+  if (!apiKey) {
+    return { url: null, error: "No API key set. Open Settings and paste your OpenAI key." };
   }
   const size = platform === "tiktok" ? "1024x1792"
     : platform === "instagram" ? "1024x1024"
