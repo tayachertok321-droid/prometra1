@@ -401,6 +401,10 @@ body{background:${C.bg};font-family:'Outfit',sans-serif;color:${C.text};min-widt
   .main-wrap{height:100vh;overflow-y:auto}
   .mob-header{display:flex !important}
 }
+@media(max-width:600px){
+  .overlay{padding:0 !important}
+  .modal{border-radius:0 !important;max-height:100dvh !important;border-left:none !important;border-right:none !important;border-top:none !important}
+}
 .mob-header{display:none;align-items:center;gap:12px;padding:12px 16px;background:${C.surface};border-bottom:1px solid ${C.border};position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 `;
 
@@ -517,7 +521,7 @@ function claudeHeaders(){
 async function callClaude(sys, msg, max=900){
   const r = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST", headers:claudeHeaders(),
-    body:JSON.stringify({model:"claude-sonnet-4-5-20251001",max_tokens:max,system:sys,messages:[{role:"user",content:msg}]})
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:max,system:sys,messages:[{role:"user",content:msg}]})
   });
   const d = await r.json();
   return d.content?.[0]?.text||"";
@@ -634,7 +638,7 @@ function AuthPage({onAuth}){
 function TranscriptModal({log,onClose}){
   if(!log) return null;
   return(
-    <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div className="overlay" style={{zIndex:1200}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="modal" style={{maxWidth:520}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <div><div style={{fontWeight:800,fontSize:16,color:C.text}}>Call Transcript</div>
@@ -660,7 +664,7 @@ function TranscriptModal({log,onClose}){
 }
 
 /* ─── CUSTOMER PROFILE MODAL ─────────────────────── */
-function CustomerProfile({customer,sector,onClose}){
+function CustomerProfile({customer,sector,onClose,onPitchNow}){
   const [tab,setTab] = useState("overview");
   const [transcript,setTranscript] = useState(null);
   if(!customer) return null;
@@ -669,7 +673,7 @@ function CustomerProfile({customer,sector,onClose}){
     <>
       {transcript&&<TranscriptModal log={transcript} onClose={()=>setTranscript(null)}/>}
       <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-        <div className="modal" style={{maxWidth:640}}>
+        <div className="modal" style={{maxWidth:820,width:"100%"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
             <div style={{display:"flex",gap:12,alignItems:"center"}}>
               <div style={{width:46,height:46,borderRadius:"50%",background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:800,color:C.purple,flexShrink:0}}>{customer.name[0]}</div>
@@ -747,7 +751,7 @@ function CustomerProfile({customer,sector,onClose}){
                 {customer.upsells.map((u,i)=>(
                   <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`,flexWrap:"wrap",gap:10}}>
                     <div style={{display:"flex",gap:10,alignItems:"center"}}><Dot color={C.green}/><span style={{fontSize:13,color:C.text,fontWeight:600}}>{u}</span></div>
-                    <button className="btn" style={{fontSize:11,padding:"5px 12px",borderColor:C.green+"55",color:C.green}} onClick={()=>toast("Pitch queued for "+customer.name+" — Maverick will lead with '"+u+"' on next outreach.", C.green)}>Pitch Now</button>
+                    <button className="btn" style={{fontSize:11,padding:"5px 12px",borderColor:C.green+"55",color:C.green}} onClick={()=>onPitchNow?onPitchNow(customer,u):toast("Pitch queued for "+customer.name, C.green)}>Pitch Now</button>
                   </div>
                 ))}
               </div>
@@ -1173,6 +1177,12 @@ function LeadsSection({sector}){
     setActiveC(c);setApiMsgs([{role:"assistant",content:open}]);setDisplayMsgs([{role:"agent",text:open}]);setInput("");scroll();
   },[sector]);
 
+  const openPitchChat=useCallback((c,upsell)=>{
+    const open=`Hey ${c.name.split(" ")[0]}! Quick one — based on what we've done for you, I think you'd love our ${upsell}. It's been super popular with our ${sector} clients. Want me to walk you through it real quick?`;
+    setTab(c.type==="fresh"?"fresh":"cold");
+    setActiveC(c);setApiMsgs([{role:"assistant",content:open}]);setDisplayMsgs([{role:"agent",text:open}]);setInput("");setProfile(null);scroll();
+  },[sector]);
+
   const send=useCallback(async()=>{
     if(!input.trim()||!activeC||typing)return;
     const text=input.trim();setInput("");
@@ -1189,7 +1199,7 @@ function LeadsSection({sector}){
   const filtered=customers.filter(c=>c.type===tab);
   return(
     <div className="fade">
-      {profile&&<CustomerProfile customer={profile} sector={sector} onClose={()=>setProfile(null)}/>}
+      {profile&&<CustomerProfile customer={profile} sector={sector} onClose={()=>setProfile(null)} onPitchNow={openPitchChat}/>}
       <SectionHeader title="Lead Agent · Maverick" sub={`Fresh lead response + cold lead revival for ${sector}`}
         action={<div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>setTab("fresh")} style={tab==="fresh"?{borderColor:C.blue,color:C.blue}:{}}>Fresh</button>
@@ -1497,13 +1507,13 @@ function BusinessInfoStep({user, onDone}){
       <div style={{width:"100%",maxWidth:580}} className="fade">
         {/* Progress bar */}
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:32,justifyContent:"center",flexWrap:"wrap"}}>
-          {["Account","Business Info","Your Plan","Agents"].map((step,i)=>(
+          {["Account","Business Info","Your Plan"].map((step,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
               <div style={{display:"flex",alignItems:"center",gap:5}}>
                 <div style={{width:24,height:24,borderRadius:"50%",background:i===1?C.grad:i<1?"#18B96A":"#E2E6EF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{i<1?"✓":i+1}</div>
                 <span style={{fontSize:12,fontWeight:i===1?700:500,color:i===1?C.purple:i<1?C.green:C.muted,whiteSpace:"nowrap"}}>{step}</span>
               </div>
-              {i<3&&<div style={{width:20,height:1,background:i<1?C.green:C.border}}/>}
+              {i<2&&<div style={{width:20,height:1,background:i<1?C.green:C.border}}/>}
             </div>
           ))}
         </div>
@@ -1607,35 +1617,10 @@ function Onboard({onDone, preSector}){
           </div>
         ))}
       </div>
-      <button className="btn-p" disabled={!plan} onClick={()=>setStage(2)} style={{width:"100%",padding:"13px",fontSize:15}}>Choose Agents</button>
-    </div>
-  );
-
-  return wrap(
-    <div style={{maxWidth:580,width:"100%"}} className="fade">
-      <button className="btn" style={{marginBottom:20}} onClick={()=>setStage(1)}>Back</button>
-      <h2 style={{fontWeight:900,fontSize:"clamp(22px,4vw,28px)",color:C.text,marginBottom:6}}>Your AI Agents</h2>
-      <p style={{color:C.muted,marginBottom:20}}>Trained for <strong style={{color:C.text}}>{sector}</strong>.</p>
-      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
-        {AGENTS.map(a=>{
-          const locked=plan==="social"&&a.id!=="social";
-          const isSel=agentId===a.id;
-          return(
-            <div key={a.id} onClick={()=>!locked&&setAgentId(a.id)} style={{border:`1.5px solid ${isSel?a.color:C.border}`,borderRadius:12,padding:16,cursor:locked?"not-allowed":"pointer",opacity:locked?.35:1,background:isSel?a.color+"0D":C.surface,display:"flex",gap:14,alignItems:"center",transition:"all .2s"}}>
-              <div style={{width:40,height:40,borderRadius:11,background:a.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:a.color,flexShrink:0}}>{a.name[0]}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap",marginBottom:3}}>
-                  <span style={{fontWeight:800,fontSize:15,color:C.text}}>{a.name}</span>
-                  <Tag color={a.color}>{a.role}</Tag>
-                  {locked&&<Tag color={C.muted}>Upgrade</Tag>}
-                </div>
-                <p style={{fontSize:12,color:C.muted,lineHeight:1.6}}>{a.desc}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <button className="btn-p" disabled={!agentId} onClick={()=>onDone(sector,plan,agentId)} style={{width:"100%",padding:"13px",fontSize:15}}>Launch Dashboard</button>
+      <button className="btn-p" disabled={!plan} onClick={()=>{
+        const defaultAgent=plan==="social"?"social":"lead";
+        onDone(sector,plan,defaultAgent);
+      }} style={{width:"100%",padding:"13px",fontSize:15}}>Launch Dashboard →</button>
     </div>
   );
 }
