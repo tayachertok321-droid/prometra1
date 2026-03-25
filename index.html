@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ProMetra — AI Marketing Platform</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #F4F6FA; font-family: 'Outfit', sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useRef, useCallback, useEffect } = React;
+
+
+/* ─── DESIGN TOKENS ─────────────────────────────── */
+const C = {
+  bg:"#F4F6FA",        // light grey page bg
+  surface:"#FFFFFF",   // white cards
+  s2:"#F8F9FC",        // very light grey inner cards
+  border:"#E2E6EF",    // soft border
+  borderHi:"#D0D6E8",  // slightly stronger border
+  text:"#131729",      // near-black text
+  muted:"#7A82A0",     // medium grey labels
+  dim:"#B8BECE",       // light grey dimmed
+  blue:"#4A7FE5", purple:"#7B5CE5", pink:"#E5507A",
+  green:"#18B96A", orange:"#F59C3C", red:"#E53E3E",
+  grad:"linear-gradient(135deg,#4A7FE5 0%,#7B5CE5 50%,#E5507A 100%)",
+};
+
+/* ─── PHOTOS ─────────────────────────────────────
+   Direct Unsplash CDN — no API key, no redirect, CORS: *
+   These are hardcoded verified photo IDs per niche
+─────────────────────────────────────────────────── */
+const PHOTOS = {
+  "Auto Detailing":[
+    "1492144534655-ae79c964c9d7","1503376780353-7e6692767b70",
+    "1541899481282-d53bffe3c35d","1590362891991-f776e747a588","1555215695-3004980ad54e"],
+  "Restaurant":[
+    "1414235077428-338989a2e8c0","1504674900247-0877df9cc836",
+    "1555396273-367ea4eb4db5","1546069901-ba9599a7e63c","1567620905732-2d1ec7ab7445"],
+  "Fitness Studio":[
+    "1534438327276-14e5300c3a48","1517836357463-d25dfeac3438",
+    "1574680096145-d05b474e2155","1571019613454-1cb2f99b2d8b","1549060279-7e168fcee0c2"],
+  "Real Estate":[
+    "1568605114967-8130f3a36994","1560185893-a55cbc8c57e8",
+    "1484154218962-a197022b5858","1512917774080-9991f1c4c750","1493809842364-78817add7ffb"],
+  "Beauty Salon":[
+    "1560869713-7d0a29430803","1522337360788-8b13dee7a37e",
+    "1487412947147-5cebf100d293","1519014816548-bf5fe059798b","1562322140-8baeececf3df"],
+  "HVAC & Plumbing":[
+    "1558618666-fcd25c85cd64","1504307651254-35680f356dfd",
+    "1581578731548-c64695cc6952","1585771724684-38269d6639fd","1556909114-f6e7ad7d3136"],
+  "Law Firm":[
+    "1589829545856-d10d557cf95f","1521791136064-7986c2920216",
+    "1450101499163-c8848c66ca85","1507679799987-c73779587ccf","1542744094-24638eff58bb"],
+  "Dental Practice":[
+    "1606811841689-23dfddce3e56","1588776814546-1ffbb172a26d",
+    "1445527815219-ecbf40867d7c","1598256761654-1efb5e4dc5ad","1609840114035-3c981b782dfe"],
+  "Retail Shop":[
+    "1441986300917-64674bd600d8","1607082348824-0a96f2a4b9da",
+    "1472851294608-062f824d29cc","1556742049-0cfed4f6a45d","1534452203293-dd0a4ee5d690"],
+  "E-commerce":[
+    "1523474253046-8cd2748b5fd2","1557821552-17105176677c",
+    "1586528116311-ad8dd3c8310d","1609600959427-5be71e562d6d","1553062407-98eeb64c6a62"],
+};
+const FALLBACK = ["1486312338219-ce68d2c6f44d","1497366216548-37526070297c","1454165804606-c3d57bc86b40"];
+
+function photoUrl(sector, idx, w=800, h=500) {
+  const arr = PHOTOS[sector] || FALLBACK;
+  const id = arr[((idx||0) % arr.length)];
+  return `https://images.unsplash.com/photo-${id}?w=${w}&h=${h}&q=80&fit=crop&auto=format`;
+}
+
+/* ─── TOAST SYSTEM ───────────────────────────────── */
+let _setToast = null;
+function toast(msg, color = C.green) {
+  if (_setToast) _setToast({ msg, color, id: Date.now() });
+}
+function ToastProvider() {
+  const [t, setT] = useState(null);
+  _setToast = setT;
+  useEffect(() => {
+    if (!t) return;
+    const id = setTimeout(() => setT(null), 3200);
+    return () => clearTimeout(id);
+  }, [t]);
+  if (!t) return null;
+  return (
+    <div style={{
+      position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)",
+      background:t.color, color:"#fff", padding:"12px 22px", borderRadius:12,
+      fontSize:13, fontWeight:600, zIndex:9999, maxWidth:"90vw", textAlign:"center",
+      boxShadow:`0 4px 24px ${t.color}55`, animation:"fadeUp .25s ease",
+      whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"
+    }}>{t.msg}</div>
+  );
+}
+/* ─── NICHE DATA ─────────────────────────────────── */
+const NICHE_DATA = {
+  "Auto Detailing":{
+    reviews:[
+      {author:"David L.",rating:1,text:"Waited 3 weeks and car came back with swirl marks. Total disappointment.",platform:"Google",neg:true,status:"Agent Responding"},
+      {author:"Tanya B.",rating:2,text:"Interior clean was okay but exterior still had water spots.",platform:"Yelp",neg:true,status:"Offer Sent"},
+      {author:"Marcus W.",rating:5,text:"Full detail on my BMW — looks absolutely showroom fresh. Incredible work.",platform:"Google",neg:false,status:"Review Request Sent"},
+      {author:"Rachel F.",rating:4,text:"Great job overall. Missed a small spot under the seats but very professional.",platform:"Facebook",neg:false,status:"Thank You Sent"},
+    ],
+    customers:[
+      {id:1,name:"Carlos M.",src:"TikTok Ad",type:"fresh",val:"$280",mood:"Hot",status:"Contacted",contacts:3,lastContact:"Today, 2:14 PM",phone:"(732) 555-0182",email:"carlos.m@email.com",
+        upsells:["Paint protection film","Ceramic coating ($800)","Monthly maintenance plan ($199/mo)"],
+        callLogs:[
+          {date:"Today 2:14 PM",duration:"2m 18s",status:"Connected",transcript:[
+            {s:"agent",t:"Hey Carlos! Maverick from ProDetail — I saw you filled out our form. Still looking to get your car detailed?"},
+            {s:"customer",t:"Yeah I've been meaning to do it. I have a 2021 BMW M3."},
+            {s:"agent",t:"Nice! Full detail on an M3 runs $280. We have Saturday open. Want me to lock that in?"},
+            {s:"customer",t:"What does that include?"},
+            {s:"agent",t:"Full interior deep clean, exterior hand wash, clay bar, and polish. 6-7 hours. Your M3 will look showroom fresh."},
+            {s:"customer",t:"That sounds good. Saturday 9 AM works."},
+          ]},
+          {date:"Yesterday 6:02 PM",duration:"0m 45s",status:"Voicemail",transcript:[
+            {s:"agent",t:"Hey Carlos, Maverick from ProDetail. Giving you a quick call — we'd love to get your car in. Call us back!"},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"Today 2:00 PM",text:"Hey Carlos! I saw you checked out our detailing packages. Your BMW deserves the best — we have weekend slots open. Want to lock one in?"},
+          {dir:"in", time:"Today 2:03 PM",text:"Yeah how much is a full detail?"},
+          {dir:"out",time:"Today 2:04 PM",text:"Full detail is $280 — interior deep clean, exterior wash, clay bar & polish. Saturday is open!"},
+          {dir:"in", time:"Today 2:06 PM",text:"That works. What time?"},
+          {dir:"out",time:"Today 2:07 PM",text:"9 AM Saturday. I'll send the address. Just bring the car — we handle everything."},
+        ],
+        stage:"Fresh Lead"},
+      {id:2,name:"Mike T.",src:"Past Customer",type:"cold",val:"$340",mood:"Cold",status:"No Reply",contacts:4,lastContact:"3 days ago",phone:"(201) 555-0374",email:"mike.t@email.com",
+        upsells:["Monthly detail plan ($199/mo)","Ceramic coating","Paint correction service"],
+        callLogs:[
+          {date:"3 days ago 11:00 AM",duration:"1m 02s",status:"Connected briefly",transcript:[
+            {s:"agent",t:"Hey Mike! It's Maverick from ProDetail. It's been about 4 months — wanted to check in."},
+            {s:"customer",t:"Oh hey. I've been busy. I'll call you back."},
+            {s:"agent",t:"No worries at all! We have a returning customer deal — 15% off. Wanted to make sure you heard about it."},
+            {s:"customer",t:"I'll call you back."},
+          ]},
+          {date:"5 days ago 2:00 PM",duration:"0m 00s",status:"No Answer",transcript:[
+            {s:"agent",t:"[Attempted call — no answer. No voicemail per cadence rules.]"},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"3 days ago 10:50 AM",text:"Hey Mike! Been a while since your last detail. Your car is probably due for some love. We have a returning customer discount — 15% off. Interested?"},
+          {dir:"out",time:"6 days ago 9:00 AM",text:"Hey Mike, ProDetail here! It's been 4 months since your last visit. We'd love to have you back. Reply for availability!"},
+        ],
+        stage:"Cold — Revitalization"},
+    ],
+    posts:[
+      {id:1,platform:"TikTok",type:"Before/After Video",reach:"38.7K",eng:"14.3%",score:98,rec:"Boost Now",ctr:"8.2%",watchTime:"22s avg",shares:847,saves:1203,comments:312,likes:"5.4K",imgIdx:0},
+      {id:2,platform:"Instagram",type:"Detail Reel",reach:"14.2K",eng:"9.1%",score:94,rec:"Recommended",ctr:"6.1%",watchTime:"18s avg",shares:421,saves:889,comments:147,likes:"2.1K",imgIdx:1},
+      {id:3,platform:"Instagram",type:"Story Poll",reach:"9.4K",eng:"7.8%",score:80,rec:"Consider",ctr:"4.3%",watchTime:"N/A",shares:89,saves:201,comments:44,likes:"N/A",imgIdx:2},
+      {id:4,platform:"Facebook",type:"Carousel",reach:"6.1K",eng:"4.2%",score:61,rec:"Low Priority",ctr:"2.1%",watchTime:"N/A",shares:33,saves:67,comments:18,likes:"290",imgIdx:3},
+    ],
+  },
+  "Restaurant":{
+    reviews:[
+      {author:"James K.",rating:1,text:"Food took 45 minutes and arrived cold. Service ignored our table.",platform:"Google",neg:true,status:"Agent Responding"},
+      {author:"Nina P.",rating:2,text:"Overpriced for the portion sizes. Server was dismissive.",platform:"Yelp",neg:true,status:"Offer Sent"},
+      {author:"Chris M.",rating:5,text:"Best pasta I've had outside of Italy. Staff was warm and attentive.",platform:"Google",neg:false,status:"Review Request Sent"},
+      {author:"Sara L.",rating:4,text:"Lovely atmosphere. The risotto was delicious — dessert was a bit too sweet.",platform:"Facebook",neg:false,status:"Thank You Sent"},
+    ],
+    customers:[
+      {id:1,name:"Maria V.",src:"Instagram Ad",type:"fresh",val:"$180 table",mood:"Hot",status:"Contacted",contacts:2,lastContact:"Today, 6:30 PM",phone:"(732) 555-0291",email:"maria.v@email.com",
+        upsells:["Private dining package ($400)","Chef's tasting menu ($65/person)","Wine pairing experience"],
+        callLogs:[
+          {date:"Today 6:30 PM",duration:"1m 44s",status:"Connected",transcript:[
+            {s:"agent",t:"Hi Maria! This is from Bella Cucina — I saw you were checking out our reservation page. Can I help you get a table?"},
+            {s:"customer",t:"Yes I wanted to book Saturday, party of 4."},
+            {s:"agent",t:"Perfect! Saturday 7 PM works. We also have a chef's tasting menu for $65/person if you want something special."},
+            {s:"customer",t:"Oh that sounds nice, what does it include?"},
+            {s:"agent",t:"5 courses — appetizer, soup, pasta, main, and dessert with wine pairing option. Our most popular experience."},
+            {s:"customer",t:"Let's do that!"},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"Today 6:20 PM",text:"Hi Maria! Thanks for your interest in Bella Cucina. We have Saturday availability — would you like to book? Our chef's tasting menu is a real experience 🍷"},
+          {dir:"in", time:"Today 6:24 PM",text:"Yes! Party of 4 for Saturday please"},
+          {dir:"out",time:"Today 6:25 PM",text:"Wonderful! 7 PM Saturday for 4 confirmed. Any dietary restrictions?"},
+          {dir:"in", time:"Today 6:27 PM",text:"One vegetarian"},
+          {dir:"out",time:"Today 6:28 PM",text:"Noted! Our chef will have a beautiful vegetarian option ready. See you Saturday!"},
+        ],
+        stage:"Fresh Lead"},
+      {id:2,name:"Ben T.",src:"Past Customer",type:"cold",val:"$240 table",mood:"Warm",status:"Re-engaged",contacts:5,lastContact:"Today",phone:"(908) 555-0155",email:"ben.t@email.com",
+        upsells:["Monthly dining membership","Private event booking","Catering package inquiry"],
+        callLogs:[
+          {date:"Today 10:00 AM",duration:"3m 22s",status:"Connected",transcript:[
+            {s:"agent",t:"Hey Ben! It's been a while since we've seen you at Bella Cucina. How have you been?"},
+            {s:"customer",t:"Good, just been cooking at home more lately."},
+            {s:"agent",t:"Totally get that! We just launched a new seasonal menu — truffle pasta and a 36-hour short rib. Your kind of meal."},
+            {s:"customer",t:"Oh that does sound good actually."},
+            {s:"agent",t:"We'd love to have you back. I can lock in your usual Friday spot?"},
+            {s:"customer",t:"Yeah let's do next Friday."},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"Today 9:45 AM",text:"Hey Ben! We miss you at Bella Cucina. New seasonal menu just dropped — truffle pasta and 36-hr short rib. Come try it this week?"},
+          {dir:"in", time:"Today 9:52 AM",text:"Oh that sounds amazing actually"},
+          {dir:"out",time:"Today 9:53 AM",text:"I can book your usual Friday evening slot. 7:30 work?"},
+          {dir:"in", time:"Today 9:54 AM",text:"Yes perfect"},
+          {dir:"out",time:"Today 9:55 AM",text:"Booked! Friday 7:30 PM. See you then Ben!"},
+        ],
+        stage:"Warm — Booking Likely"},
+    ],
+    posts:[
+      {id:1,platform:"TikTok",type:"Food Reel",reach:"52.1K",eng:"16.8%",score:99,rec:"Boost Now",ctr:"9.4%",watchTime:"27s avg",shares:1240,saves:2100,comments:580,likes:"8.7K",imgIdx:0},
+      {id:2,platform:"Instagram",type:"Dish Photo",reach:"18.3K",eng:"11.2%",score:95,rec:"Recommended",ctr:"7.3%",watchTime:"N/A",shares:610,saves:1320,comments:210,likes:"3.4K",imgIdx:1},
+      {id:3,platform:"Instagram",type:"Story",reach:"11.2K",eng:"8.4%",score:82,rec:"Consider",ctr:"5.1%",watchTime:"N/A",shares:120,saves:310,comments:67,likes:"N/A",imgIdx:2},
+      {id:4,platform:"Facebook",type:"Event Post",reach:"7.8K",eng:"5.1%",score:68,rec:"Low Priority",ctr:"3.2%",watchTime:"N/A",shares:55,saves:88,comments:30,likes:"420",imgIdx:3},
+    ],
+  },
+  "Law Firm":{
+    reviews:[
+      {author:"Robert T.",rating:1,text:"Called three times and never received a callback. Completely unprofessional.",platform:"Google",neg:true,status:"Agent Responding"},
+      {author:"Linda K.",rating:2,text:"Overcharged for a simple consultation. Felt rushed and unheard.",platform:"Yelp",neg:true,status:"Offer Sent"},
+      {author:"James P.",rating:5,text:"Won my case after two other firms failed. Absolute professionals.",platform:"Google",neg:false,status:"Review Request Sent"},
+      {author:"Angela M.",rating:4,text:"Knowledgeable attorney. Communication could be a bit faster.",platform:"Facebook",neg:false,status:"Thank You Sent"},
+    ],
+    customers:[
+      {id:1,name:"David S.",src:"Google Ad",type:"fresh",val:"$2,500 retainer",mood:"Hot",status:"Contacted",contacts:2,lastContact:"Today, 3:00 PM",phone:"(973) 555-0812",email:"david.s@email.com",
+        upsells:["Annual retainer agreement","Estate planning package","Business formation services"],
+        callLogs:[
+          {date:"Today 3:00 PM",duration:"4m 12s",status:"Connected",transcript:[
+            {s:"agent",t:"Hi David, this is from Parker Legal Group — you reached out about a business dispute. Can you tell me a bit more about the situation?"},
+            {s:"customer",t:"Yes, a former partner is claiming ownership of IP I developed before the partnership."},
+            {s:"agent",t:"That's definitely something we handle. Our IP litigation team has won 94% of cases like this. Would you like to schedule a consultation this week?"},
+            {s:"customer",t:"How much is a consultation?"},
+            {s:"agent",t:"First consultation is complimentary — 30 minutes with one of our senior partners. We can do Thursday at 2 PM."},
+            {s:"customer",t:"Thursday works."},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"Today 2:50 PM",text:"Hi David! Thanks for reaching out to Parker Legal Group. I understand you have an IP matter — our team handles exactly this. Can I schedule a complimentary consultation?"},
+          {dir:"in", time:"Today 2:54 PM",text:"Yes that would be great"},
+          {dir:"out",time:"Today 2:55 PM",text:"Thursday at 2 PM with Attorney Parker confirmed. You'll receive a confirmation email shortly."},
+        ],
+        stage:"Fresh Lead"},
+      {id:2,name:"Carol B.",src:"Past Client",type:"cold",val:"$1,800",mood:"Warm",status:"Re-engaged",contacts:3,lastContact:"Yesterday",phone:"(201) 555-0433",email:"carol.b@email.com",
+        upsells:["Annual legal retainer","Will & estate update","Business contract review"],
+        callLogs:[
+          {date:"Yesterday 11:00 AM",duration:"2m 55s",status:"Connected",transcript:[
+            {s:"agent",t:"Hi Carol, it's Parker Legal reaching out. It's been about a year since your contract review — wanted to check in."},
+            {s:"customer",t:"Oh yes, I actually have been meaning to call. My business situation changed."},
+            {s:"agent",t:"Happy to help! We can schedule a review of your updated agreements. It's usually a quick process since we know your background."},
+            {s:"customer",t:"That would be great. Can we do next week?"},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"Yesterday 10:45 AM",text:"Hi Carol! This is Parker Legal — it's been about a year since your last contract review. Business situations change — we'd love to make sure you're still protected. 15 min call?"},
+          {dir:"in", time:"Yesterday 10:52 AM",text:"Actually yes, my situation did change recently"},
+          {dir:"out",time:"Yesterday 10:53 AM",text:"Perfect timing then. Let's schedule a review — can you do next Tuesday or Wednesday morning?"},
+        ],
+        stage:"Warm — Booking Likely"},
+    ],
+    posts:[
+      {id:1,platform:"LinkedIn",type:"Case Win Post",reach:"12.4K",eng:"8.1%",score:94,rec:"Boost Now",ctr:"5.2%",watchTime:"N/A",shares:310,saves:890,comments:145,likes:"1.2K",imgIdx:0},
+      {id:2,platform:"Facebook",type:"Legal Tip Video",reach:"8.3K",eng:"6.4%",score:88,rec:"Recommended",ctr:"4.1%",watchTime:"45s avg",shares:201,saves:450,comments:88,likes:"640",imgIdx:1},
+      {id:3,platform:"Instagram",type:"Team Photo",reach:"5.1K",eng:"5.2%",score:74,rec:"Consider",ctr:"2.8%",watchTime:"N/A",shares:44,saves:122,comments:31,likes:"N/A",imgIdx:2},
+      {id:4,platform:"Facebook",type:"Testimonial",reach:"3.8K",eng:"3.6%",score:60,rec:"Low Priority",ctr:"1.9%",watchTime:"N/A",shares:18,saves:41,comments:12,likes:"190",imgIdx:3},
+    ],
+  },
+};
+
+// Generic fallback for niches without specific data
+function buildGenericData(sector) {
+  return {
+    reviews:[
+      {author:"Alex R.",rating:1,text:`Disappointed with the ${sector} service — didn't meet expectations at all.`,platform:"Google",neg:true,status:"Agent Responding"},
+      {author:"Sam P.",rating:2,text:`Okay experience but communication was lacking throughout.`,platform:"Yelp",neg:true,status:"Offer Sent"},
+      {author:"Jordan K.",rating:5,text:`Outstanding ${sector} service. Exceeded every expectation. Highly recommend.`,platform:"Google",neg:false,status:"Review Request Sent"},
+      {author:"Taylor M.",rating:4,text:`Great service overall. Minor issue but the team handled it professionally.`,platform:"Facebook",neg:false,status:"Thank You Sent"},
+    ],
+    customers:[
+      {id:1,name:"Riley J.",src:"Google Ad",type:"fresh",val:"$350",mood:"Hot",status:"Contacted",contacts:2,lastContact:"Today",phone:"(732) 555-0100",email:"riley.j@email.com",
+        upsells:[`Premium ${sector} package`,`Monthly service plan`,`Referral program enrollment`],
+        callLogs:[
+          {date:"Today 1:00 PM",duration:"2m 30s",status:"Connected",transcript:[
+            {s:"agent",t:`Hi Riley! I saw you were interested in our ${sector} services. Still looking to get started?`},
+            {s:"customer",t:"Yes I'm comparing a few options right now."},
+            {s:"agent",t:"Happy to help you decide. What's most important to you — price, speed, or quality?"},
+            {s:"customer",t:"Quality mostly."},
+            {s:"agent",t:"Perfect — that's exactly what we're known for. Want to schedule a quick consultation this week?"},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"Today 12:45 PM",text:`Hi Riley! Thanks for your interest in our ${sector} services. We have availability this week — want to get started?`},
+          {dir:"in", time:"Today 12:51 PM",text:"Yes what are your prices?"},
+          {dir:"out",time:"Today 12:52 PM",text:"Pricing depends on your specific needs. Can I give you a quick call to walk through options?"},
+        ],
+        stage:"Fresh Lead"},
+      {id:2,name:"Morgan T.",src:"Past Customer",type:"cold",val:"$280",mood:"Cold",status:"No Reply",contacts:3,lastContact:"4 days ago",phone:"(908) 555-0201",email:"morgan.t@email.com",
+        upsells:[`Loyalty discount (15% off)`,`Upgrade to premium plan`,`Refer a friend program`],
+        callLogs:[
+          {date:"4 days ago 10:00 AM",duration:"0m 52s",status:"Connected briefly",transcript:[
+            {s:"agent",t:`Hey Morgan! It's been a while — we wanted to reach out and see how things are going.`},
+            {s:"customer",t:"Hey, kind of busy right now."},
+            {s:"agent",t:"No problem at all — I'll shoot you a text with our returning customer offer."},
+          ]},
+        ],
+        msgLog:[
+          {dir:"out",time:"4 days ago 9:45 AM",text:`Hey Morgan! It's been a while since your last visit. We'd love to have you back — 15% off for returning customers this month. Interested?`},
+          {dir:"out",time:"7 days ago 9:00 AM",text:`Hi Morgan! Just checking in. We have some new options you might love. Want to hear about them?`},
+        ],
+        stage:"Cold — Revitalization"},
+    ],
+    posts:[
+      {id:1,platform:"TikTok",type:"Promo Video",reach:"28.4K",eng:"11.2%",score:92,rec:"Boost Now",ctr:"7.1%",watchTime:"19s avg",shares:620,saves:980,comments:244,likes:"3.8K",imgIdx:0},
+      {id:2,platform:"Instagram",type:"Feature Post",reach:"12.1K",eng:"8.4%",score:87,rec:"Recommended",ctr:"5.3%",watchTime:"N/A",shares:310,saves:640,comments:112,likes:"1.8K",imgIdx:1},
+      {id:3,platform:"Instagram",type:"Story",reach:"8.2K",eng:"6.8%",score:76,rec:"Consider",ctr:"3.9%",watchTime:"N/A",shares:88,saves:210,comments:55,likes:"N/A",imgIdx:2},
+      {id:4,platform:"Facebook",type:"Carousel",reach:"5.4K",eng:"3.2%",score:58,rec:"Low Priority",ctr:"1.8%",watchTime:"N/A",shares:24,saves:52,comments:14,likes:"220",imgIdx:3},
+    ],
+  };
+}
+
+function getNicheData(sector) {
+  return NICHE_DATA[sector] || buildGenericData(sector);
+}
+
+/* ─── CONSTANTS ──────────────────────────────────── */
+const SECTORS = ["Auto Detailing","Restaurant","Fitness Studio","Real Estate","Beauty Salon","HVAC & Plumbing","Law Firm","Dental Practice","Retail Shop","E-commerce"];
+const PLANS = {
+  social:    {name:"Social Manager",      price:"$299.99",tag:"Core",      color:C.blue,
+    features:["TikTok & Meta automation","AI post scheduling","Virality scoring","Boost optimization"]},
+  growth:    {name:"Social + Lead Agent", price:"$579.98",tag:"Popular",   color:C.purple,
+    features:["Everything in Social","Fresh lead response","Cold lead revival","Cold calling"]},
+  enterprise:{name:"Full Suite",          price:"Custom",  tag:"Enterprise",color:C.pink,
+    features:["Everything in Growth","Review management","Custom agent training","White-glove setup"]},
+};
+const PLATFORMS = {
+  tiktok:   {name:"TikTok",   color:"#FF2D55",format:"9:16"},
+  instagram:{name:"Instagram",color:"#C13584",format:"1:1"},
+  facebook: {name:"Facebook", color:"#1877F2",format:"16:9"},
+};
+const AGENTS = [
+  {id:"social",name:"Aria",    role:"Social Media AI", color:C.blue,  desc:"Manages TikTok & Meta. Schedules posts, decides what to boost, maximizes organic reach."},
+  {id:"lead",  name:"Maverick",role:"Lead Agent",       color:C.purple,desc:"Responds to fresh leads in minutes. Revitalizes cold leads. Trained on real sales calls."},
+  {id:"review",name:"Echo",    role:"Review Manager",   color:C.green, desc:"Monitors reviews, contains negatives, automates 5-star outreach to happy customers."},
+];
+const NAV = [
+  {id:"dashboard",label:"Dashboard"},
+  {id:"studio",   label:"Social Studio"},
+  {id:"leads",    label:"Lead Agent",  locked:["social"]},
+  {id:"reviews",  label:"Reviews",     locked:["social","growth"]},
+  {id:"analytics",label:"Analytics"},
+];
+
+/* ─── GLOBAL CSS ─────────────────────────────────── */
+const G = `
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{overflow-x:hidden}
+body{background:${C.bg};font-family:'Outfit',sans-serif;color:${C.text};min-width:320px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:${C.dim};border-radius:4px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.fade{animation:fadeUp .28s ease forwards}
+.pulse{animation:pulse 2s infinite}
+.spin{animation:spin .9s linear infinite}
+.card{background:${C.surface};border:1px solid ${C.border};border-radius:14px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+@media(max-width:600px){.card{padding:14px;border-radius:10px}}
+.card-sm{background:${C.s2};border:1px solid ${C.border};border-radius:10px;padding:12px}
+.btn{background:${C.surface};border:1px solid ${C.borderHi};color:${C.muted};padding:7px 14px;border-radius:8px;font-family:'Outfit',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.btn:hover{border-color:${C.purple};color:${C.purple};background:${C.purple}0A}
+.btn:disabled{opacity:.35;cursor:default}
+.btn-p{background:${C.grad};border:none;color:#fff;padding:11px 22px;border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .18s,transform .18s,box-shadow .18s;white-space:nowrap;line-height:1.4;box-shadow:0 4px 16px rgba(123,92,229,.35)}
+.btn-p:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 6px 22px rgba(123,92,229,.45)}
+.btn-p:disabled{opacity:.25;cursor:default;transform:none;box-shadow:none}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:${C.muted};transition:all .15s;user-select:none;white-space:nowrap}
+.nav-item:hover{background:${C.bg};color:${C.text}}
+.nav-item.active{background:${C.grad};color:#fff;box-shadow:0 3px 12px rgba(123,92,229,.3)}
+.nav-item.locked{opacity:.35;cursor:not-allowed}
+.tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+.inp{background:${C.surface};border:1.5px solid ${C.borderHi};border-radius:9px;padding:11px 14px;font-size:13px;color:${C.text};font-family:'Outfit',sans-serif;outline:none;width:100%;transition:border-color .15s,box-shadow .15s;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.inp:focus{border-color:${C.purple};box-shadow:0 0 0 3px ${C.purple}18}
+.inp::placeholder{color:${C.dim}}
+.mono{font-family:'JetBrains Mono',monospace}
+.divider{height:1px;background:${C.border};margin:14px 0}
+.overlay{position:fixed;inset:0;background:rgba(15,18,40,.55);display:flex;align-items:center;justify-content:center;z-index:999;padding:16px;backdrop-filter:blur(6px)}
+.modal{background:${C.surface};border:1px solid ${C.border};border-radius:16px;padding:24px;width:100%;animation:modalIn .2s ease;overflow-y:auto;max-height:92vh;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.sbar{height:5px;border-radius:4px;background:${C.border};overflow:hidden}
+.sfill{height:100%;border-radius:4px;transition:width .6s ease}
+.shimmer{background:linear-gradient(90deg,${C.s2} 25%,${C.border} 50%,${C.s2} 75%);background-size:200% 100%;animation:shimmer 1.4s infinite}
+/* MOBILE NAV */
+@media(max-width:768px){
+  .sidebar{position:fixed !important;left:0;top:0;bottom:0;height:100vh !important;z-index:900;transform:translateX(-100%);transition:transform .25s ease;box-shadow:4px 0 24px rgba(0,0,0,.15)}
+  .sidebar.open{transform:translateX(0) !important}
+  .main-wrap{height:100vh;overflow-y:auto}
+  .mob-header{display:flex !important}
+}
+.mob-header{display:none;align-items:center;gap:12px;padding:12px 16px;background:${C.surface};border-bottom:1px solid ${C.border};position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+`;
+
+/* ─── SHARED UI ──────────────────────────────────── */
+const Tag = ({children,color}) => <span className="tag" style={{background:color+"22",color}}>{children}</span>;
+const Dot = ({color,pulse:p}) => <span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:color,flexShrink:0,minWidth:8}} className={p?"pulse":""}/>;
+const Spinner = ({color=C.purple,size=20}) => <div className="spin" style={{width:size,height:size,border:`2px solid ${color}33`,borderTopColor:color,borderRadius:"50%",flexShrink:0}}/>;
+
+function Stat({label,value,sub,color}){
+  return(
+    <div className="card-sm">
+      <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",marginBottom:6}}>{label}</div>
+      <div className="mono" style={{fontSize:20,fontWeight:500,color:color||C.text,lineHeight:1}}>{value}</div>
+      {sub&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>{sub}</div>}
+    </div>
+  );
+}
+
+function SectionHeader({title,sub,action}){
+  return(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:10}}>
+      <div><h2 style={{fontSize:"clamp(18px,4vw,24px)",fontWeight:800,color:C.text,marginBottom:4}}>{title}</h2>
+        {sub&&<p style={{fontSize:13,color:C.muted,lineHeight:1.5}}>{sub}</p>}</div>
+      {action&&<div style={{flexShrink:0}}>{action}</div>}
+    </div>
+  );
+}
+
+function ScoreBar({score}){
+  const color=score>=90?C.green:score>=70?C.blue:score>=50?C.orange:C.red;
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{fontSize:10,color:C.muted}}>Virality</span>
+        <span className="mono" style={{fontSize:10,color,fontWeight:600}}>{score}</span>
+      </div>
+      <div className="sbar"><div className="sfill" style={{width:`${score}%`,background:color}}/></div>
+    </div>
+  );
+}
+
+/* ─── PHOTO COMPONENT ────────────────────────────── */
+/* Niche color palettes for SVG placeholders */
+const NICHE_COLORS = {
+  "Auto Detailing":  ["#1E3A5F","#2A5298","#3A7BD5"],
+  "Restaurant":      ["#7B2D00","#C0392B","#E74C3C"],
+  "Fitness Studio":  ["#1A3A1A","#27AE60","#2ECC71"],
+  "Real Estate":     ["#2C3E50","#34495E","#7F8C8D"],
+  "Beauty Salon":    ["#6D2D6D","#9B59B6","#D980FA"],
+  "HVAC & Plumbing": ["#1A2F4A","#2471A3","#5DADE2"],
+  "Law Firm":        ["#1C2833","#2E4057","#566573"],
+  "Dental Practice": ["#0D3349","#1A6EA8","#5DADE2"],
+  "Retail Shop":     ["#4A1942","#7D3C98","#A569BD"],
+  "E-commerce":      ["#0B3D2E","#1E8449","#27AE60"],
+};
+const NICHE_ICONS = {
+  "Auto Detailing":  "🚗", "Restaurant": "🍽️", "Fitness Studio": "💪",
+  "Real Estate": "🏠", "Beauty Salon": "💅", "HVAC & Plumbing": "🔧",
+  "Law Firm": "⚖️", "Dental Practice": "🦷", "Retail Shop": "🛍️", "E-commerce": "📦",
+};
+
+function Photo({sector, idx, style, alt}){
+  const [imgOk, setImgOk] = useState(false);
+  const [tried, setTried] = useState(false);
+  const src = photoUrl(sector, idx||0);
+  const colors = NICHE_COLORS[sector] || ["#2C3E50","#3498DB","#5DADE2"];
+  const icon = NICHE_ICONS[sector] || "📊";
+  const seed = (idx||0) % 3;
+  const bg = `linear-gradient(135deg, ${colors[seed]} 0%, ${colors[(seed+1)%3]} 100%)`;
+
+  return(
+    <div style={{position:"relative",overflow:"hidden",...style}}>
+      {/* Always-visible gradient placeholder */}
+      <div style={{position:"absolute",inset:0,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+        <div style={{fontSize:"clamp(24px,5vw,40px)",lineHeight:1}}>{icon}</div>
+        <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",fontWeight:600,textTransform:"uppercase",letterSpacing:".1em",textAlign:"center",padding:"0 8px"}}>{sector}</div>
+      </div>
+      {/* Try loading real image on top */}
+      {!tried && (
+        <img
+          key={src}
+          src={src}
+          alt={alt||sector}
+          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block",opacity:imgOk?1:0,transition:"opacity .4s"}}
+          onLoad={()=>{setImgOk(true);setTried(true);}}
+          onError={()=>setTried(true)}
+        />
+      )}
+      {imgOk && (
+        <img
+          src={src}
+          alt={alt||sector}
+          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── CLAUDE API ─────────────────────────────────── */
+async function callClaude(sys, msg, max=900){
+  const r = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:max,system:sys,messages:[{role:"user",content:msg}]})
+  });
+  const d = await r.json();
+  return d.content?.[0]?.text||"";
+}
+async function callClaudeChat(sys, messages, max=400){
+  const r = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:max,system:sys,messages})
+  });
+  const d = await r.json();
+  return d.content?.[0]?.text||"";
+}
+
+/* ─── LOGIN / SIGNUP ─────────────────────────────── */
+function AuthPage({onAuth}){
+  const [mode,setMode] = useState("login");
+  const [name,setName] = useState("");
+  const [email,setEmail] = useState("");
+  const [pass,setPass] = useState("");
+
+  // No validation — any input moves forward
+  const proceed = () => {
+    const displayName = name.trim() || (email.trim() ? email.split("@")[0] : "User");
+    onAuth({ name: displayName || "User", email: email.trim() || "user@prometra.ai" });
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#F0F3FF 0%,#F8F4FF 50%,#FFF4F8 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",position:"relative",overflow:"hidden"}}>
+      <style>{G}</style>
+      {/* Soft blobs */}
+      <div style={{position:"absolute",top:"-10%",right:"-5%",width:480,height:480,borderRadius:"50%",background:"linear-gradient(135deg,#4A7FE522,#7B5CE522)",filter:"blur(60px)",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",bottom:"-10%",left:"-5%",width:520,height:520,borderRadius:"50%",background:"linear-gradient(135deg,#7B5CE518,#E5507A18)",filter:"blur(80px)",pointerEvents:"none"}}/>
+
+      <div style={{width:"100%",maxWidth:440,position:"relative",zIndex:1}} className="fade">
+        {/* Logo */}
+        <div style={{textAlign:"center",marginBottom:36}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:12,marginBottom:10}}>
+            <div style={{width:44,height:44,borderRadius:13,background:C.grad,flexShrink:0,boxShadow:"0 6px 20px rgba(123,92,229,.4)"}}/>
+            <div style={{fontWeight:900,fontSize:30,background:C.grad,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:"-0.5px"}}>ProMetra</div>
+          </div>
+          <div style={{fontSize:14,color:C.muted,fontWeight:500}}>AI marketing platform for local businesses</div>
+        </div>
+
+        {/* Card */}
+        <div style={{background:"#fff",borderRadius:20,padding:32,boxShadow:"0 8px 40px rgba(100,80,200,.12),0 1px 4px rgba(0,0,0,.06)"}}>
+          {/* Mode toggle */}
+          <div style={{display:"flex",background:C.bg,borderRadius:11,padding:4,marginBottom:28,gap:4}}>
+            {[["login","Sign In"],["signup","Create Account"]].map(([m,label])=>(
+              <button key={m} onClick={()=>setMode(m)}
+                style={{flex:1,padding:"10px",borderRadius:8,border:"none",
+                  background:mode===m?"#fff":"transparent",
+                  color:mode===m?C.text:C.muted,
+                  fontFamily:"'Outfit',sans-serif",fontSize:13,fontWeight:700,cursor:"pointer",
+                  transition:"all .2s",
+                  boxShadow:mode===m?"0 2px 8px rgba(0,0,0,.08)":"none"}}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {mode==="signup"&&(
+              <div>
+                <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Full Name</label>
+                <input className="inp" value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/>
+              </div>
+            )}
+            <div>
+              <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Email</label>
+              <input className="inp" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/>
+            </div>
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <label style={{fontSize:11,color:C.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Password</label>
+                {mode==="login"&&<span style={{fontSize:12,color:C.purple,cursor:"pointer",fontWeight:600}} onClick={()=>toast("Reset link sent!", C.purple)}>Forgot password?</span>}
+              </div>
+              <input className="inp" type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••"/>
+            </div>
+
+            <button className="btn-p" onClick={proceed} style={{width:"100%",padding:"14px",fontSize:15,marginTop:4,borderRadius:11}}>
+              {mode==="login"?"Sign In to ProMetra →":"Create Free Account →"}
+            </button>
+          </div>
+
+          {mode==="signup"&&(
+            <p style={{fontSize:11,color:C.muted,textAlign:"center",marginTop:18,lineHeight:1.7}}>
+              By signing up you agree to our Terms of Service.<br/>
+              <span style={{color:C.green,fontWeight:600}}>7-day free trial · No credit card required.</span>
+            </p>
+          )}
+          {mode==="login"&&(
+            <p style={{fontSize:12,color:C.muted,textAlign:"center",marginTop:16}}>
+              Don't have an account?{" "}
+              <span style={{color:C.purple,fontWeight:700,cursor:"pointer"}} onClick={()=>setMode("signup")}>Sign up free</span>
+            </p>
+          )}
+        </div>
+
+        {/* Social proof */}
+        <div style={{display:"flex",gap:0,justifyContent:"center",marginTop:28,flexWrap:"wrap",gap:8}}>
+          {[["2,400+","businesses"],["$12M","revenue driven"],["4.9★","avg rating"]].map(([val,lbl],i)=>(
+            <div key={i} style={{textAlign:"center",padding:"10px 20px",background:"#fff",borderRadius:12,border:`1px solid ${C.border}`,boxShadow:"0 1px 4px rgba(0,0,0,.05)"}}>
+              <div style={{fontWeight:800,fontSize:16,background:C.grad,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{val}</div>
+              <div style={{fontSize:11,color:C.muted,fontWeight:500}}>{lbl}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── TRANSCRIPT MODAL ───────────────────────────── */
+function TranscriptModal({log,onClose}){
+  if(!log) return null;
+  return(
+    <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="modal" style={{maxWidth:520}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+          <div><div style={{fontWeight:800,fontSize:16,color:C.text}}>Call Transcript</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{log.date} · {log.duration} · <Tag color={log.status==="Connected"?C.green:C.muted}>{log.status}</Tag></div>
+          </div>
+          <button className="btn" style={{fontSize:11,padding:"5px 10px"}} onClick={onClose}>Close</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10,maxHeight:420,overflowY:"auto",paddingRight:4}}>
+          {log.transcript.map((line,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:line.s==="customer"?"flex-end":"flex-start",gap:8}}>
+              {line.s==="agent"&&<div style={{width:24,height:24,borderRadius:6,background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.purple,flexShrink:0,alignSelf:"flex-end"}}>M</div>}
+              <div style={{background:line.s==="customer"?C.s2:C.purple+"1A",border:`1px solid ${line.s==="customer"?C.border:C.purple+"33"}`,color:C.text,padding:"9px 13px",borderRadius:line.s==="customer"?"14px 14px 4px 14px":"14px 14px 14px 4px",fontSize:13,lineHeight:1.55,maxWidth:"82%"}}>
+                <div style={{fontSize:9,color:line.s==="agent"?C.purple:C.muted,fontWeight:700,marginBottom:3}}>{line.s==="agent"?"MAVERICK":"CUSTOMER"}</div>
+                {line.t}
+              </div>
+              {line.s==="customer"&&<div style={{width:24,height:24,borderRadius:6,background:C.s2,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.muted,flexShrink:0,alignSelf:"flex-end"}}>C</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── CUSTOMER PROFILE MODAL ─────────────────────── */
+function CustomerProfile({customer,sector,onClose}){
+  const [tab,setTab] = useState("overview");
+  const [transcript,setTranscript] = useState(null);
+  if(!customer) return null;
+  const mc = customer.mood==="Hot"?C.red:customer.mood==="Warm"?C.orange:customer.mood==="Closed"?C.green:C.muted;
+  return(
+    <>
+      {transcript&&<TranscriptModal log={transcript} onClose={()=>setTranscript(null)}/>}
+      <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+        <div className="modal" style={{maxWidth:640}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+            <div style={{display:"flex",gap:12,alignItems:"center"}}>
+              <div style={{width:46,height:46,borderRadius:"50%",background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:800,color:C.purple,flexShrink:0}}>{customer.name[0]}</div>
+              <div><div style={{fontWeight:800,fontSize:18,color:C.text}}>{customer.name}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{customer.src} · {customer.stage}</div></div>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}><Tag color={mc}>{customer.mood}</Tag><button className="btn" style={{fontSize:11,padding:"5px 10px"}} onClick={onClose}>Close</button></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:8,marginBottom:16}}>
+            <div className="card-sm" style={{textAlign:"center"}}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Contacted</div><div className="mono" style={{fontSize:20,color:C.purple}}>{customer.contacts}</div></div>
+            <div className="card-sm" style={{textAlign:"center"}}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Deal Value</div><div className="mono" style={{fontSize:20,color:C.green}}>{customer.val}</div></div>
+            <div className="card-sm" style={{textAlign:"center"}}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Last Contact</div><div style={{fontSize:11,color:C.text,fontWeight:600,marginTop:3}}>{customer.lastContact}</div></div>
+            <div className="card-sm" style={{textAlign:"center"}}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Status</div><div style={{fontSize:11,color:mc,fontWeight:700,marginTop:3}}>{customer.status}</div></div>
+          </div>
+          <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+            <span style={{fontSize:12,color:C.muted}}>{customer.phone}</span>
+            <span style={{color:C.dim}}>·</span>
+            <span style={{fontSize:12,color:C.muted}}>{customer.email}</span>
+          </div>
+          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:18,overflowX:"auto"}}>
+            {["overview","calls","messages","upsells"].map(t=>(
+              <button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:`2px solid ${tab===t?C.purple:"transparent"}`,padding:"0 4px 11px",marginRight:16,color:tab===t?C.purple:C.muted,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Outfit',sans-serif",textTransform:"capitalize",whiteSpace:"nowrap"}}>
+                {t}{t==="calls"?` (${customer.callLogs.length})`:t==="messages"?` (${customer.msgLog.length})`:""}
+              </button>
+            ))}
+          </div>
+          {tab==="overview"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{background:C.bg,borderRadius:10,padding:14}}>
+                <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Latest Call · {customer.callLogs[0]?.date} · {customer.callLogs[0]?.duration}</div>
+                <p style={{fontSize:13,color:C.text,lineHeight:1.7}}>{customer.callLogs[0]?.transcript.slice(0,2).map(l=>`${l.s==="agent"?"Maverick":"Customer"}: "${l.t}"`).join("  →  ")}</p>
+                <button className="btn" style={{marginTop:10,fontSize:11,padding:"5px 12px",borderColor:C.purple+"55",color:C.purple}} onClick={()=>setTranscript(customer.callLogs[0])}>View Full Transcript</button>
+              </div>
+              <div style={{background:C.bg,borderRadius:10,padding:14}}>
+                <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Latest Message · {customer.msgLog[0]?.time}</div>
+                <p style={{fontSize:13,color:C.text,lineHeight:1.7}}>{customer.msgLog[0]?.text}</p>
+              </div>
+            </div>
+          )}
+          {tab==="calls"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {customer.callLogs.map((c,i)=>(
+                <div key={i} style={{background:C.bg,borderRadius:10,padding:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:8}}>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:C.text}}>{c.date}</span>
+                      <Tag color={c.status.includes("Connected")?C.green:C.muted}>{c.status}</Tag>
+                    </div>
+                    <span className="mono" style={{fontSize:11,color:C.muted}}>Duration: {c.duration}</span>
+                  </div>
+                  <p style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.6}}>{c.transcript[0]?.t?.slice(0,100)}...</p>
+                  <button className="btn" style={{fontSize:11,padding:"5px 12px",borderColor:C.purple+"55",color:C.purple}} onClick={()=>setTranscript(c)}>View Full Transcript</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab==="messages"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:10,maxHeight:380,overflowY:"auto",paddingRight:4}}>
+              {customer.msgLog.map((m,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:m.dir==="in"?"flex-end":"flex-start",gap:8}}>
+                  {m.dir==="out"&&<div style={{width:24,height:24,borderRadius:6,background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.purple,flexShrink:0,alignSelf:"flex-end"}}>M</div>}
+                  <div style={{maxWidth:"80%"}}>
+                    <div style={{background:m.dir==="in"?C.s2:C.purple+"1A",border:`1px solid ${m.dir==="in"?C.border:C.purple+"33"}`,color:C.text,padding:"10px 13px",borderRadius:m.dir==="in"?"14px 14px 4px 14px":"14px 14px 14px 4px",fontSize:13,lineHeight:1.55}}>{m.text}</div>
+                    <div style={{fontSize:10,color:C.dim,marginTop:3,textAlign:m.dir==="in"?"right":"left"}}>{m.time}</div>
+                  </div>
+                  {m.dir==="in"&&<div style={{width:24,height:24,borderRadius:6,background:C.s2,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.muted,flexShrink:0,alignSelf:"flex-end"}}>C</div>}
+                </div>
+              ))}
+            </div>
+          )}
+          {tab==="upsells"&&(
+            <div>
+              <div style={{fontSize:13,color:C.muted,marginBottom:14,lineHeight:1.7}}>Recommended upsells for <strong style={{color:C.text}}>{customer.name}</strong> based on their {sector} profile:</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+                {customer.upsells.map((u,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`,flexWrap:"wrap",gap:10}}>
+                    <div style={{display:"flex",gap:10,alignItems:"center"}}><Dot color={C.green}/><span style={{fontSize:13,color:C.text,fontWeight:600}}>{u}</span></div>
+                    <button className="btn" style={{fontSize:11,padding:"5px 12px",borderColor:C.green+"55",color:C.green}} onClick={()=>toast("Pitch queued for "+customer.name+" — Maverick will lead with '"+u+"' on next outreach.", C.green)}>Pitch Now</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:C.purple+"0D",border:`1px solid ${C.purple}33`,borderRadius:10,padding:14}}>
+                <div style={{fontSize:10,color:C.purple,fontWeight:800,marginBottom:5}}>MAVERICK'S TIMING ADVICE</div>
+                <p style={{fontSize:13,color:C.muted,lineHeight:1.6}}>Best time to pitch an upsell is immediately after confirming a booking — customer is already in "yes" mode. Lead with value first, price second.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─── POST VIEWER MODAL ──────────────────────────── */
+function PostViewer({post,sector,onClose}){
+  if(!post) return null;
+  const recColor=post.rec==="Boost Now"?C.green:post.rec==="Recommended"?C.blue:post.rec==="Consider"?C.orange:C.muted;
+  const scoreColor=post.score>=90?C.green:post.score>=70?C.blue:post.score>=50?C.orange:C.red;
+  const platColor=PLATFORMS[post.platform.toLowerCase()]?.color||C.muted;
+  return(
+    <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="modal" style={{maxWidth:680}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <div style={{fontWeight:800,fontSize:18,color:C.text}}>{post.platform} · {post.type}</div>
+          <div style={{display:"flex",gap:8}}><Tag color={recColor}>{post.rec}</Tag><button className="btn" style={{fontSize:11,padding:"5px 10px"}} onClick={onClose}>Close</button></div>
+        </div>
+        {/* Thumbnail with play button */}
+        <div style={{borderRadius:12,overflow:"hidden",marginBottom:20,position:"relative",aspectRatio:"16/9",background:C.s2}}>
+          <Photo sector={sector} idx={post.imgIdx||0} style={{position:"absolute",inset:0}} alt={`${sector} post`}/>
+          <div style={{position:"absolute",top:12,left:12,background:platColor,borderRadius:7,padding:"4px 11px"}}>
+            <span style={{fontSize:11,color:"#fff",fontWeight:800}}>{post.platform}</span>
+          </div>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{width:52,height:52,borderRadius:"50%",background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}>
+              <div style={{width:0,height:0,borderTop:"10px solid transparent",borderBottom:"10px solid transparent",borderLeft:"18px solid #fff",marginLeft:4}}/>
+            </div>
+          </div>
+        </div>
+        {/* Metrics */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:8,marginBottom:18}}>
+          {[["Reach",post.reach,C.text],["Engagement",post.eng,C.green],["CTR",post.ctr,C.blue],["Avg Watch",post.watchTime,C.purple],["Shares",String(post.shares),C.orange],["Saves",String(post.saves),C.blue],["Comments",String(post.comments),C.muted],["Likes",post.likes,C.pink]].map(([l,v,c])=>(
+            <div key={l} className="card-sm" style={{textAlign:"center"}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:3}}>{l}</div>
+              <div className="mono" style={{fontSize:16,color:c,fontWeight:600}}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:18}}>
+          <div className="card-sm">
+            <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Virality Score</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+              <span className="mono" style={{fontSize:22,color:scoreColor,fontWeight:600}}>{post.score}</span>
+              <span style={{fontSize:11,color:C.muted}}>/100</span>
+            </div>
+            <div className="sbar"><div className="sfill" style={{width:`${post.score}%`,background:scoreColor}}/></div>
+          </div>
+          <div className="card-sm">
+            <div style={{fontSize:10,color:C.muted,marginBottom:6}}>AI Recommendation</div>
+            <Tag color={recColor}>{post.rec}</Tag>
+            <p style={{fontSize:12,color:C.muted,marginTop:8,lineHeight:1.6}}>{post.rec==="Boost Now"?"Exceptional performance — boost now for maximum ROI.":post.rec==="Recommended"?"Strong engagement — boosting will significantly amplify.":post.rec==="Consider"?"Decent stats. Boost if budget allows.":"Low performance — improve organic reach first."}</p>
+          </div>
+        </div>
+        {(post.rec==="Boost Now"||post.rec==="Recommended")&&<button className="btn-p" style={{width:"100%",padding:"12px",fontSize:14}} onClick={()=>toast("Boost queued! Aria will connect to Meta Ads to set budget, audience & run duration.", C.green)}>Boost This Post — Set Budget</button>}
+      </div>
+    </div>
+  );
+}
+
+/* ─── SETTINGS MODAL ─────────────────────────────── */
+function SettingsModal({sector,plan,onClose,onSave}){
+  const [s,setS]=useState(sector);
+  const [p,setP]=useState(plan);
+  return(
+    <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="modal" style={{maxWidth:700}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
+          <div style={{fontWeight:800,fontSize:20,color:C.text}}>Account Settings</div>
+          <button className="btn" style={{fontSize:11,padding:"5px 10px"}} onClick={onClose}>Close</button>
+        </div>
+        <div style={{marginBottom:24}}>
+          <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:6}}>Business Niche</div>
+          <div style={{fontSize:13,color:C.muted,marginBottom:12}}>Changing your niche updates all content, reviews, leads, and agent data.</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {SECTORS.map(sec=><button key={sec} className="btn" onClick={()=>setS(sec)} style={s===sec?{borderColor:C.purple,color:C.purple,background:C.purple+"11"}:{}}>{sec}</button>)}
+          </div>
+        </div>
+        <div className="divider"/>
+        <div style={{marginBottom:20}}>
+          <div style={{fontWeight:700,fontSize:15,color:C.text,marginBottom:6}}>Subscription Plan</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:14}}>
+            {Object.entries(PLANS).map(([key,pl])=>(
+              <div key={key} onClick={()=>setP(key)} style={{border:`1.5px solid ${p===key?pl.color:C.border}`,borderRadius:12,padding:18,cursor:"pointer",background:p===key?pl.color+"0D":C.s2,transition:"all .2s"}}>
+                <Tag color={pl.color}>{pl.tag}</Tag>
+                <div style={{fontWeight:800,fontSize:16,color:C.text,marginTop:10,marginBottom:3}}>{pl.name}</div>
+                <div className="mono" style={{fontSize:18,color:pl.color,marginBottom:10}}>{pl.price}{pl.price!=="Custom"&&<span style={{fontSize:11,color:C.muted}}>/mo</span>}</div>
+                {pl.features.map((f,i)=><div key={i} style={{display:"flex",gap:7,marginBottom:4,alignItems:"center"}}><Dot color={pl.color}/><span style={{fontSize:12,color:C.muted}}>{f}</span></div>)}
+                {p===key&&<div style={{marginTop:10,fontSize:11,color:pl.color,fontWeight:700}}>Currently Selected</div>}
+              </div>
+            ))}
+          </div>
+          <div style={{padding:12,background:C.s2,borderRadius:9,border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.7}}><strong style={{color:C.text}}>vs. hiring humans:</strong> Social manager $500–5K/mo + Lead agent $2K–8K/mo + Reputation manager $500–2K/mo. ProMetra from <strong style={{color:C.blue}}>$299.99/mo.</strong></div>
+          </div>
+        </div>
+        <button className="btn-p" onClick={()=>onSave(s,p)} style={{width:"100%",padding:"12px",fontSize:15}}>Save Changes</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── DALL-E IMAGE GENERATION ───────────────────── */
+const OPENAI_KEY = "YOUR_OPENAI_API_KEY_HERE";
+
+async function generateImage(prompt, sector, platform) {
+  // GitHub Pages has no sandbox restrictions — direct OpenAI call works fine
+  const size = platform === "tiktok" ? "1024x1792"
+    : platform === "instagram" ? "1024x1024"
+    : "1792x1024";
+  try {
+    const res = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer YOUR_OPENAI_API_KEY_HERE"
+      },
+      body: JSON.stringify({ model:"dall-e-3", prompt, n:1, size, quality:"standard" })
+    });
+    const d = await res.json();
+    if (d.data?.[0]?.url) return { url: d.data[0].url, error: null };
+    const msg = d.error?.message || d.error?.code || JSON.stringify(d).slice(0,120);
+    return { url: null, error: msg };
+  } catch(e) {
+    return { url: null, error: "Request failed: " + e.message };
+  }
+}
+
+function buildImagePrompt(sector, platform, promo, caption) {
+  const style = platform === "tiktok"
+    ? "vertical portrait format, vibrant, eye-catching, social media style"
+    : platform === "instagram"
+    ? "square format, aesthetic, high-quality, instagram-worthy"
+    : "horizontal landscape format, professional, Facebook ad style";
+
+  const subject = promo
+    ? `${sector} business promotion: ${promo}`
+    : `${sector} business marketing`;
+
+  return `Professional marketing photo for a ${subject}. ${style}. No text, no words, no logos. Photorealistic, commercial photography quality. ${caption ? "Scene context: " + caption.slice(0,80) : ""}`;
+}
+
+/* ─── SOCIAL STUDIO ──────────────────────────────── */
+function StudioSection({sector}){
+  const [promo,setPromo]=useState("");
+  const [tab,setTab]=useState("tiktok");
+  const [loading,setLoading]=useState(false);
+  const [outputs,setOutputs]=useState({});
+  // aiImages: {tiktok: {url, loading, error}, instagram: ..., facebook: ...}
+  const [aiImages,setAiImages]=useState({});
+  const [photoSeed,setPhotoSeed]=useState({tiktok:0,instagram:1,facebook:2});
+
+  const generate = useCallback(async()=>{
+    setLoading(true);setOutputs({});
+    const results = await Promise.all(Object.keys(PLATFORMS).map(async(platform)=>{
+      const p=PLATFORMS[platform];
+      const raw = await callClaude(
+        "Expert social media marketer. Return ONLY valid JSON, no markdown, no explanation.",
+        `Platform: ${platform} (${p.name}). Business: ${sector}. ${promo?`Promo: ${promo}.`:"No promo — highlight quality and results."}
+Return exactly: {"caption":"2-4 sentences, no hashtags, ${platform} voice for ${sector}","hashtags":"${platform==="tiktok"?"5":platform==="instagram"?"8":"3"} hashtags for ${sector}","hook":"${platform==="tiktok"?"scroll-stopper opening 2 seconds":"attention-grabbing opening"} for ${sector}","cta":"clear call to action for ${sector}","bestTime":"best specific day+time for ${sector} on ${platform}","engagementTip":"one ${platform} algorithm tip for ${sector} right now"}`
+      );
+      try{ const c=raw.replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/```\s*$/,"").trim(); return [platform,JSON.parse(c)]; }
+      catch(e){ return [platform,null]; }
+    }));
+    const out={};
+    for(const [p,c] of results) if(c) out[p]=c;
+    setOutputs(out);setLoading(false);
+  },[sector,promo]);
+
+  const generateAIImage = useCallback(async(platform)=>{
+    const caption = outputs[platform]?.caption || "";
+    const size = platform==="tiktok" ? "1024x1792" : platform==="instagram" ? "1024x1024" : "1792x1024";
+    const prompt = buildImagePrompt(sector, platform, promo, caption);
+
+    setAiImages(prev=>({...prev,[platform]:{url:null,loading:true,error:null}}));
+    const result = await generateImage(prompt, sector, platform);
+    if(result.url){
+      setAiImages(prev=>({...prev,[platform]:{url:result.url,loading:false,error:null}}));
+      toast("AI image generated!", C.green);
+    } else {
+      setAiImages(prev=>({...prev,[platform]:{url:null,loading:false,error:result.error}}));
+    }
+  },[sector,promo,outputs]);
+
+  const cur=outputs[tab];
+  const pCfg=PLATFORMS[tab];
+  const has=Object.keys(outputs).length>0;
+  const aiImg=aiImages[tab];
+
+  return(
+    <div className="fade">
+      <SectionHeader title="Social Studio" sub="AI-generated captions, hashtags, CTAs, posting times — and real AI photos via DALL-E 3"/>
+      <div className="card" style={{marginBottom:18}}>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end"}}>
+          <div style={{flex:"2 1 180px"}}>
+            <label style={{fontSize:10,color:C.muted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Promotion (optional)</label>
+            <input className="inp" value={promo} onChange={e=>setPromo(e.target.value)} placeholder={`e.g. Summer Sale, New Service, ${sector} Offer...`}/>
+          </div>
+          <button className="btn-p" onClick={generate} disabled={loading} style={{padding:"11px 28px",fontSize:13,flexShrink:0}}>
+            {loading?<span style={{display:"flex",gap:8,alignItems:"center"}}><Spinner size={14} color="#fff"/>Generating...</span>:"Generate All Platforms"}
+          </button>
+        </div>
+      </div>
+
+      {!has&&!loading&&(
+        <div className="card" style={{textAlign:"center",padding:"52px 24px"}}>
+          <div style={{width:52,height:52,borderRadius:14,background:C.grad,margin:"0 auto 16px"}}/>
+          <div style={{fontWeight:800,fontSize:18,color:C.text,marginBottom:8}}>Ready to generate {sector} content</div>
+          <div style={{fontSize:13,color:C.muted,maxWidth:380,margin:"0 auto",lineHeight:1.75}}>Click Generate to create tailored captions, hashtags, CTAs, and posting times for TikTok, Instagram, and Facebook. Then generate real AI photos with DALL-E 3.</div>
+        </div>
+      )}
+
+      {loading&&(
+        <div className="card" style={{textAlign:"center",padding:"48px 24px"}}>
+          <div style={{display:"flex",justifyContent:"center",gap:20,marginBottom:20,flexWrap:"wrap"}}>
+            {Object.entries(PLATFORMS).map(([k,p])=>(
+              <div key={k} style={{textAlign:"center"}}>
+                <div style={{width:72,height:72,borderRadius:12,background:p.color+"18",border:`1px solid ${p.color}44`,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center"}}><Spinner size={24} color={p.color}/></div>
+                <div style={{fontSize:12,color:C.muted}}>{p.name}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:13,color:C.muted}}>Writing {sector} content for all 3 platforms...</div>
+        </div>
+      )}
+
+      {has&&(
+        <>
+          <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+            {Object.entries(PLATFORMS).map(([k,p])=>(
+              <button key={k} className="btn" onClick={()=>setTab(k)}
+                style={{flex:"1 1 100px",padding:"10px",fontSize:12,fontWeight:700,borderColor:tab===k?p.color:C.borderHi,color:tab===k?p.color:C.muted,background:tab===k?p.color+"18":"transparent"}}>
+                {p.name}{outputs[k]&&<span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:C.green,marginLeft:7,verticalAlign:"middle"}}/>}
+              </button>
+            ))}
+          </div>
+          {cur&&(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:18}}>
+              {/* IMAGE PANEL */}
+              <div>
+                {/* Image display area */}
+                <div style={{borderRadius:14,overflow:"hidden",border:`1px solid ${C.border}`,position:"relative",
+                  aspectRatio:tab==="tiktok"?"9/16":tab==="instagram"?"1/1":"16/9",
+                  background:C.s2}}>
+
+                  {/* Always show gradient placeholder behind */}
+                  <Photo sector={sector} idx={photoSeed[tab]} style={{position:"absolute",inset:0}} alt={`${sector} ${tab}`}/>
+
+                  {/* AI image overlaid on top if available */}
+                  {aiImg?.url&&(
+                    <img src={aiImg.url} alt="AI generated"
+                      style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                  )}
+
+                  {/* Loading overlay */}
+                  {aiImg?.loading&&(
+                    <div style={{position:"absolute",inset:0,background:"rgba(255,255,255,0.85)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,backdropFilter:"blur(4px)"}}>
+                      <Spinner size={32} color={C.purple}/>
+                      <div style={{fontSize:13,color:C.purple,fontWeight:700}}>DALL-E 3 generating...</div>
+                      <div style={{fontSize:11,color:C.muted}}>~5 seconds</div>
+                    </div>
+                  )}
+
+                  {/* Platform badge */}
+                  <div style={{position:"absolute",top:10,left:10,background:pCfg.color,borderRadius:6,padding:"4px 10px",zIndex:2}}>
+                    <span style={{fontSize:11,color:"#fff",fontWeight:800}}>{pCfg.name}</span>
+                  </div>
+                  <div style={{position:"absolute",top:10,right:10,background:"rgba(0,0,0,.55)",borderRadius:5,padding:"3px 8px",backdropFilter:"blur(4px)",zIndex:2}}>
+                    <span style={{fontSize:10,color:"#fff9"}}>{pCfg.format}</span>
+                  </div>
+
+                  {/* AI badge when AI image shown */}
+                  {aiImg?.url&&(
+                    <div style={{position:"absolute",bottom:10,left:10,background:"rgba(123,92,229,0.9)",borderRadius:6,padding:"4px 10px",zIndex:2,backdropFilter:"blur(4px)"}}>
+                      <span style={{fontSize:10,color:"#fff",fontWeight:700}}>✦ DALL-E 3</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action buttons */}
+                <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                  <button className="btn-p" style={{flex:1,padding:"9px",fontSize:12}} onClick={()=>{
+                    const d=new Date(); d.setDate(d.getDate()+1);
+                    toast("Post scheduled for "+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+" at optimal time. Aria will post automatically.", C.blue);
+                  }}>Schedule Post</button>
+                </div>
+
+                {/* DALL-E generate button */}
+                <button
+                  onClick={()=>generateAIImage(tab)}
+                  disabled={aiImg?.loading}
+                  style={{
+                    width:"100%",marginTop:8,padding:"10px",borderRadius:9,border:"none",
+                    background:aiImg?.loading?"#E2E6EF":C.grad,
+                    color:"#fff",fontSize:13,fontWeight:700,cursor:aiImg?.loading?"default":"pointer",
+                    display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                    fontFamily:"'Outfit',sans-serif",
+                    boxShadow:aiImg?.loading?"none":"0 4px 16px rgba(123,92,229,.35)",
+                    transition:"all .2s"
+                  }}>
+                  {aiImg?.loading
+                    ? <><Spinner size={14} color={C.muted}/><span style={{color:C.muted}}>Generating AI Image...</span></>
+                    : <>✦ Generate AI Image — DALL-E 3</>
+                  }
+                </button>
+
+                {aiImg?.error&&(
+                  <div style={{marginTop:8,background:C.red+"0F",border:`1px solid ${C.red}33`,borderRadius:9,padding:"10px 14px"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.red,marginBottom:4}}>Generation failed — exact error:</div>
+                    <div style={{fontSize:11,color:C.red,fontFamily:"monospace",wordBreak:"break-all",lineHeight:1.5}}>{aiImg.error}</div>
+                  </div>
+                )}
+                {aiImg?.url&&(
+                  <div style={{fontSize:10,color:C.muted,marginTop:6,textAlign:"center"}}>
+                    Real AI photo generated for {sector} · <span style={{color:C.purple,cursor:"pointer"}} onClick={()=>generateAIImage(tab)}>Regenerate</span>
+                  </div>
+                )}
+                {!aiImg&&(
+                  <div style={{fontSize:10,color:C.muted,marginTop:6,textAlign:"center"}}>~$0.04 per image · Tailored to your {sector} business</div>
+                )}
+              </div>
+
+              {/* COPY PANEL */}
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {cur.hook&&(
+                  <div style={{background:pCfg.color+"18",border:`1.5px solid ${pCfg.color}44`,borderRadius:12,padding:"12px 16px"}}>
+                    <div style={{fontSize:10,color:pCfg.color,fontWeight:800,letterSpacing:".1em",textTransform:"uppercase",marginBottom:5}}>{tab==="tiktok"?"Hook — First 2 Sec":"Opening Line"}</div>
+                    <div style={{fontSize:15,color:C.text,fontWeight:700,lineHeight:1.5}}>{cur.hook}</div>
+                  </div>
+                )}
+                <div className="card-sm"><div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",marginBottom:6}}>Caption</div><div style={{fontSize:13,color:C.text,lineHeight:1.75}}>{cur.caption}</div></div>
+                <div className="card-sm"><div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",marginBottom:6}}>Hashtags</div><div className="mono" style={{fontSize:12,color:C.purple,lineHeight:1.8,wordBreak:"break-word"}}>{cur.hashtags}</div></div>
+                <div className="card-sm"><div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",marginBottom:6}}>Call to Action</div><div style={{fontSize:14,color:C.text,fontWeight:600}}>{cur.cta}</div></div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div className="card-sm"><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Best Post Time</div><div style={{fontSize:12,color:pCfg.color,fontWeight:700}}>{cur.bestTime}</div></div>
+                  <div className="card-sm"><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Format</div><div style={{fontSize:12,color:C.text,fontWeight:600}}>{pCfg.format}</div></div>
+                </div>
+                {cur.engagementTip&&<div style={{background:pCfg.color+"0F",border:`1px solid ${pCfg.color}30`,borderRadius:9,padding:"11px 14px"}}><div style={{fontSize:10,color:pCfg.color,fontWeight:800,marginBottom:4}}>{pCfg.name} Tip</div><div style={{fontSize:12,color:C.muted,lineHeight:1.6}}>{cur.engagementTip}</div></div>}
+                <button className="btn" onClick={generate} disabled={loading} style={{fontSize:12,padding:"9px"}}>Regenerate All</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── LEAD AGENT ─────────────────────────────────── */
+function LeadsSection({sector}){
+  const {customers}=getNicheData(sector);
+  const [tab,setTab]=useState("fresh");
+  const [profile,setProfile]=useState(null);
+  const [activeC,setActiveC]=useState(null);
+  const [apiMsgs,setApiMsgs]=useState([]);
+  const [displayMsgs,setDisplayMsgs]=useState([]);
+  const [input,setInput]=useState("");
+  const [typing,setTyping]=useState(false);
+  const chatEnd=useRef(null);
+  const scroll=()=>setTimeout(()=>chatEnd.current?.scrollIntoView({behavior:"smooth"}),40);
+
+  const openChat=useCallback((c)=>{
+    const open=c.type==="fresh"
+      ?`Hey ${c.name.split(" ")[0]}! Just saw you were interested in our ${sector} services — reaching out right away. Still looking to get booked in?`
+      :`Hey ${c.name.split(" ")[0]}, it's been a while! We've really missed you. What's been keeping you from coming back?`;
+    setActiveC(c);setApiMsgs([{role:"assistant",content:open}]);setDisplayMsgs([{role:"agent",text:open}]);setInput("");scroll();
+  },[sector]);
+
+  const send=useCallback(async()=>{
+    if(!input.trim()||!activeC||typing)return;
+    const text=input.trim();setInput("");
+    const newD=[...displayMsgs,{role:"user",text}];setDisplayMsgs(newD);
+    const newA=[...apiMsgs,{role:"user",content:text}];setApiMsgs(newA);
+    setTyping(true);scroll();
+    const sys=`You are Maverick, an elite sales agent for a ${sector} business. Talking to ${activeC.name}, a ${activeC.type==="fresh"?"fresh lead — CLOSE this sale NOW, be warm, fast, direct":"cold lead — find their pain point, rebuild trust, re-book them"}. RULES: Reference earlier conversation naturally. Keep replies 2-3 sentences. Sound human. If ready to book, give immediate next steps.`;
+    const reply=await callClaudeChat(sys,newA,350);
+    setApiMsgs(prev=>[...prev,{role:"assistant",content:reply}]);
+    setDisplayMsgs(prev=>[...prev,{role:"agent",text:reply}]);
+    setTyping(false);scroll();
+  },[input,activeC,apiMsgs,displayMsgs,typing,sector]);
+
+  const filtered=customers.filter(c=>c.type===tab);
+  return(
+    <div className="fade">
+      {profile&&<CustomerProfile customer={profile} sector={sector} onClose={()=>setProfile(null)}/>}
+      <SectionHeader title="Lead Agent · Maverick" sub={`Fresh lead response + cold lead revival for ${sector}`}
+        action={<div style={{display:"flex",gap:8}}>
+          <button className="btn" onClick={()=>setTab("fresh")} style={tab==="fresh"?{borderColor:C.blue,color:C.blue}:{}}>Fresh</button>
+          <button className="btn" onClick={()=>setTab("cold")} style={tab==="cold"?{borderColor:C.orange,color:C.orange}:{}}>Cold</button>
+        </div>}
+      />
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:12,marginBottom:20}}>
+        <Stat label="Fresh Today" value="8" sub="2.4 min avg" color={C.blue}/>
+        <Stat label="Cold Revived" value="12" sub="this month" color={C.orange}/>
+        <Stat label="Deals Closed" value="$3,640" sub="agent-driven" color={C.green}/>
+        <Stat label="Connection" value="34%" sub="call outbound"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
+        <div className="card">
+          <div style={{fontWeight:700,color:C.text,marginBottom:14}}>{tab==="fresh"?"Fresh Ad Leads":"Cold Lead Pipeline"}</div>
+          {filtered.map((c,i)=>{
+            const mc=c.mood==="Hot"?C.red:c.mood==="Warm"?C.orange:c.mood==="Closed"?C.green:C.muted;
+            const active=activeC?.id===c.id;
+            return(
+              <div key={i} style={{padding:12,marginBottom:8,background:active?C.purple+"0A":C.s2,borderRadius:10,border:`1px solid ${active?C.purple+"44":C.border}`,transition:"all .2s"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,flexWrap:"wrap",gap:5}}>
+                  <span style={{fontSize:13,color:C.text,fontWeight:700}}>{c.name}</span>
+                  <Tag color={mc}>{c.mood}</Tag>
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{c.src} · {c.contacts} contacts</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
+                  <span className="mono" style={{fontSize:12,color:C.green,flex:1}}>{c.val}</span>
+                  <button className="btn" style={{fontSize:10,padding:"4px 9px",borderColor:C.purple+"55",color:C.purple}} onClick={()=>setProfile(c)}>Profile</button>
+                  <button className="btn" style={{fontSize:10,padding:"4px 9px"}} onClick={()=>openChat(c)}>{tab==="fresh"?"Sell Now":"Re-engage"}</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="card" style={{display:"flex",flexDirection:"column",minHeight:360}}>
+          {activeC?(
+            <>
+              <div style={{display:"flex",gap:9,alignItems:"center",marginBottom:12,paddingBottom:11,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap"}}>
+                <div style={{width:33,height:33,borderRadius:9,background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:C.purple,flexShrink:0}}>M</div>
+                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>Maverick → {activeC.name}</div><div style={{fontSize:10,color:C.muted}}>Full conversation memory</div></div>
+                <button className="btn" style={{fontSize:10,padding:"4px 9px",borderColor:C.purple+"55",color:C.purple}} onClick={()=>setProfile(activeC)}>Profile</button>
+                <button className="btn" style={{fontSize:10,padding:"4px 9px"}} onClick={()=>{setActiveC(null);setApiMsgs([]);setDisplayMsgs([]);}}>Close</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:9,marginBottom:10,maxHeight:320}}>
+                {displayMsgs.map((m,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start",gap:7}}>
+                    {m.role==="agent"&&<div style={{width:22,height:22,borderRadius:5,background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:C.purple,flexShrink:0,alignSelf:"flex-end"}}>M</div>}
+                    <div style={{background:m.role==="user"?C.purple:C.s2,border:m.role==="agent"?`1px solid ${C.border}`:"none",color:C.text,padding:"9px 12px",borderRadius:m.role==="user"?"13px 13px 4px 13px":"13px 13px 13px 4px",fontSize:12,lineHeight:1.55,maxWidth:"82%"}}>{m.text}</div>
+                  </div>
+                ))}
+                {typing&&<div style={{display:"flex",gap:7,alignItems:"center"}}><div style={{width:22,height:22,borderRadius:5,background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:C.purple,flexShrink:0}}>M</div><Spinner size={13} color={C.purple}/><span style={{fontSize:11,color:C.muted}}>Thinking...</span></div>}
+                <div ref={chatEnd}/>
+              </div>
+              <div style={{display:"flex",gap:7,alignItems:"flex-end"}}>
+                <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder="Reply as prospect..." rows={2}
+                  style={{flex:1,background:C.bg,border:`1px solid ${C.borderHi}`,borderRadius:8,padding:"9px 12px",fontSize:12,color:C.text,fontFamily:"'Outfit',sans-serif",outline:"none",resize:"none"}}/>
+                <button className="btn-p" onClick={send} disabled={typing||!input.trim()} style={{padding:"9px 16px",flexShrink:0}}>Send</button>
+              </div>
+            </>
+          ):(
+            <div style={{textAlign:"center",padding:"52px 16px"}}>
+              <div style={{width:44,height:44,borderRadius:12,background:C.purple+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:C.purple,margin:"0 auto 14px"}}>M</div>
+              <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:6}}>Maverick is ready</div>
+              <div style={{fontSize:12,color:C.muted,lineHeight:1.7}}>Select a lead and click Sell Now or Re-engage.<br/>Profile shows full call logs, transcripts, and message chains.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── REVIEWS ────────────────────────────────────── */
+function ReviewsSection({sector}){
+  const {reviews}=getNicheData(sector);
+  const [selected,setSelected]=useState(null);
+  const [response,setResponse]=useState("");
+  const [generating,setGenerating]=useState(false);
+  const [editing,setEditing]=useState(false);
+
+  const gen=async(r)=>{
+    setSelected(r);setGenerating(true);setResponse("");setEditing(false);
+    const t=await callClaude(
+      `You are Echo, an AI reputation manager for a ${sector} business. Write a genuine human response. 1-2 star: empathetic, take responsibility, offer resolution, invite them to reconsider. 4-5 star: warm thanks, encourage referrals. Under 75 words. Sound real, not corporate.`,
+      `${r.rating}-star review on ${r.platform} for a ${sector} business: "${r.text}"`
+    );
+    setResponse(t);setGenerating(false);
+  };
+
+  return(
+    <div className="fade">
+      <SectionHeader title="Review Manager · Echo" sub={`AI reputation management for ${sector}`}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:12,marginBottom:20}}>
+        <Stat label="Avg Rating" value="4.6" sub="last 30 days" color={C.blue}/>
+        <Stat label="Reviews Mo." value="18" sub="7 from AI" color={C.green}/>
+        <Stat label="Negatives" value="3/3" sub="100% handled"/>
+        <Stat label="Texts Sent" value="47" sub="post-service"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
+        <div className="card">
+          <div style={{fontWeight:700,color:C.text,marginBottom:14}}>Review Inbox — {sector}</div>
+          {reviews.map((r,i)=>(
+            <div key={i} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:selected?.author===r.author?C.border+"44":"transparent",borderRadius:selected?.author===r.author?8:0,padding:selected?.author===r.author?"12px 10px":"12px 0",transition:"all .2s"}} onClick={()=>gen(r)}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,flexWrap:"wrap",gap:5}}>
+                <div style={{display:"flex",gap:9,alignItems:"center"}}>
+                  <div style={{width:28,height:28,borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:C.text,flexShrink:0}}>{r.author[0]}</div>
+                  <div><div style={{fontSize:12,color:C.text,fontWeight:600}}>{r.author}</div><div style={{fontSize:10,color:C.muted}}>{r.platform}</div></div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+                  <div style={{color:r.rating>=4?C.green:r.rating>=3?C.orange:C.red,fontWeight:700,fontSize:13}}>{"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</div>
+                  <Tag color={r.neg?C.red:C.green}>{r.status}</Tag>
+                </div>
+              </div>
+              <p style={{fontSize:12,color:C.muted,lineHeight:1.5}}>{r.text}</p>
+            </div>
+          ))}
+        </div>
+        <div className="card">
+          <div style={{fontWeight:700,color:C.text,marginBottom:14}}>Echo's Response</div>
+          {selected?(
+            <div>
+              <div style={{background:C.bg,borderRadius:9,padding:12,marginBottom:12}}>
+                <div style={{fontSize:10,color:C.muted,marginBottom:3}}>{selected.author} · {"★".repeat(selected.rating)} · {selected.platform}</div>
+                <p style={{fontSize:12,color:C.muted,fontStyle:"italic"}}>"{selected.text}"</p>
+              </div>
+              {generating?<div style={{display:"flex",gap:9,alignItems:"center",color:C.muted,fontSize:13}}><Spinner size={15} color={C.green}/>Echo crafting response...</div>:(
+                <div>
+                  {editing?(
+                    <div style={{marginBottom:12}}>
+                      <textarea
+                        value={response}
+                        onChange={e=>setResponse(e.target.value)}
+                        rows={5}
+                        style={{width:"100%",background:C.bg,border:`1px solid ${C.purple}`,borderRadius:9,padding:"11px 14px",fontSize:13,color:C.text,fontFamily:"'Outfit',sans-serif",outline:"none",resize:"vertical",lineHeight:1.6}}
+                      />
+                      <button className="btn" style={{fontSize:12,marginTop:8,borderColor:C.purple,color:C.purple}} onClick={()=>setEditing(false)}>Done Editing</button>
+                    </div>
+                  ):(
+                    <div style={{fontSize:13,color:C.text,lineHeight:1.7,background:C.bg,padding:13,borderRadius:9,marginBottom:12}}>{response}</div>
+                  )}
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                    <button className="btn-p" style={{fontSize:12,padding:"8px 14px"}} onClick={()=>{setEditing(false);toast("Response posted to "+selected.platform+"! Echo will monitor for follow-up.", C.green);}}>Post Response</button>
+                    <button className="btn" style={{fontSize:12,borderColor:editing?C.purple:C.borderHi,color:editing?C.purple:C.muted}} onClick={()=>setEditing(e=>!e)}>{editing?"Done":"Edit"}</button>
+                    <button className="btn" style={{fontSize:12}} onClick={()=>gen(selected)}>Regenerate</button>
+                  </div>
+                  {selected.rating<=2&&(
+                    <div style={{marginTop:12,background:C.orange+"11",border:`1px solid ${C.orange}33`,borderRadius:9,padding:12}}>
+                      <div style={{fontSize:10,color:C.orange,fontWeight:800,marginBottom:4,textTransform:"uppercase",letterSpacing:".06em"}}>Containment Strategy</div>
+                      <p style={{fontSize:12,color:C.muted}}>Echo recommends a private offer — complimentary service or discount — to encourage the reviewer to update their rating.</p>
+                      <button className="btn" style={{marginTop:8,fontSize:11,padding:"5px 11px",color:C.orange,borderColor:C.orange}} onClick={()=>toast("Private offer sent to "+selected.author+" via DM. Echo follows up in 48h if no reply.", C.orange)}>Send Private Offer</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ):<div style={{textAlign:"center",paddingTop:52,color:C.muted,fontSize:13}}>Click a review to generate Echo's response</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ANALYTICS ──────────────────────────────────── */
+function AnalyticsSection({sector}){
+  return(
+    <div className="fade">
+      <SectionHeader title="Analytics & Intelligence" sub={`Performance data for ${sector}`}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:12,marginBottom:20}}>
+        <Stat label="Impressions" value="487K" sub="31% MoM"/>
+        <Stat label="Organic/Paid" value="68/32" sub="strong organic" color={C.green}/>
+        <Stat label="Best Content" value="Video" sub="2.4x reach" color={C.blue}/>
+        <Stat label="Boost ROAS" value="4.8x" sub="avg 30 days" color={C.purple}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
+        <div className="card">
+          <div style={{fontWeight:700,color:C.text,marginBottom:14}}>Platform Performance</div>
+          {[{ch:"TikTok",pct:43,reach:"209K",trend:"+67%",color:"#FF2D55"},{ch:"Instagram",pct:32,reach:"156K",trend:"+28%",color:"#C13584"},{ch:"Facebook",pct:18,reach:"88K",trend:"+4%",color:"#1877F2"}].map(c=>(
+            <div key={c.ch} style={{marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                <div style={{display:"flex",gap:7,alignItems:"center"}}><Dot color={c.color}/><span style={{fontSize:13,color:C.text,fontWeight:600}}>{c.ch}</span></div>
+                <div style={{display:"flex",gap:10}}><span className="mono" style={{fontSize:11,color:C.green}}>{c.trend}</span><span className="mono" style={{fontSize:11,color:C.muted}}>{c.reach}</span></div>
+              </div>
+              <div className="sbar"><div className="sfill" style={{width:`${c.pct}%`,background:`linear-gradient(90deg,${C.blue},${C.purple})`}}/></div>
+            </div>
+          ))}
+          <div className="divider"/>
+          <div style={{fontWeight:700,color:C.text,marginBottom:10,fontSize:13}}>Algorithm Insights</div>
+          {[{n:"TikTok rewards hooks in first 2s — watch time drives distribution",i:"High"},{n:"Instagram Reels at 6–9PM get 2.1x reach vs mornings",i:"High"},{n:"5–8 hashtags outperform 30-tag posts by 34%",i:"Medium"}].map((n,i)=>(
+            <div key={i} style={{display:"flex",gap:9,padding:"9px 0",borderBottom:`1px solid ${C.border}`,alignItems:"flex-start"}}>
+              <Dot color={n.i==="High"?C.green:C.orange}/><div style={{flex:1,fontSize:12,color:C.muted,lineHeight:1.5}}>{n.n}</div><Tag color={n.i==="High"?C.green:C.orange}>{n.i}</Tag>
+            </div>
+          ))}
+        </div>
+        <div className="card">
+          <div style={{fontWeight:700,color:C.text,marginBottom:14}}>Trend Forecast · {sector}</div>
+          {[{t:"Short-form video content",g:"+67%"},{t:"Micro-influencer partnerships",g:"+34%"},{t:"User-generated content",g:"+28%"},{t:"Behind-the-scenes",g:"+22%"}].map((t,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:7}}>
+              <span style={{fontSize:13,color:C.muted}}>{t.t}</span>
+              <span className="mono" style={{fontSize:12,color:C.green}}>{t.g}</span>
+            </div>
+          ))}
+          <div className="divider"/>
+          <div style={{fontWeight:700,color:C.text,marginBottom:10,fontSize:13}}>Competitor Pulse</div>
+          {[{b:"Local Competitor A",s:"High video output",t:"Medium"},{b:"Regional Chain B",s:"Heavy paid ads",t:"High"},{b:"Competitor C",s:"UGC campaigns",t:"Low"}].map((c,i)=>(
+            <div key={i} style={{padding:"9px 0",borderBottom:`1px solid ${C.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+                <span style={{fontSize:12,color:C.text,fontWeight:600}}>{c.b}</span>
+                <Tag color={c.t==="High"?C.red:c.t==="Medium"?C.orange:C.green}>{c.t} Threat</Tag>
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1}}>{c.s}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── DASHBOARD ──────────────────────────────────── */
+function Dashboard({sector,plan,agentId,onOpenSettings}){
+  const {posts}=getNicheData(sector);
+  const [viewPost,setViewPost]=useState(null);
+  const agent=AGENTS.find(a=>a.id===agentId);
+  return(
+    <div className="fade">
+      {viewPost&&<PostViewer post={viewPost} sector={sector} onClose={()=>setViewPost(null)}/>}
+      <SectionHeader title="Dashboard"
+        sub={`${sector} · ${PLANS[plan].name} · Agent: ${agent?.name}`}
+        action={<div style={{display:"flex",gap:8,alignItems:"center"}}><Tag color={PLANS[plan].color}>{PLANS[plan].tag}</Tag><button className="btn" style={{fontSize:12}} onClick={onOpenSettings}>Settings</button></div>}
+      />
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:12,marginBottom:20}}>
+        <Stat label="Weekly Reach" value="103K" sub="+22%" color={C.green}/>
+        <Stat label="Engagement" value="9.8%" sub="TikTok leading"/>
+        <Stat label="Active Posts" value="24" sub="8 boosted"/>
+        <Stat label="Fresh Leads" value="31" sub="2.4 min avg"/>
+        <Stat label="Avg Rating" value="4.6" sub="18 reviews" color={C.blue}/>
+        <Stat label="Revenue" value="$4,280" sub="automations" color={C.green}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
+        <div className="card">
+          <div style={{fontWeight:700,color:C.text,marginBottom:14}}>Top Posts — {sector}</div>
+          {posts.slice(0,3).map((p,i)=>{
+            const recColor=p.rec==="Boost Now"?C.green:p.rec==="Recommended"?C.blue:p.rec==="Consider"?C.orange:C.muted;
+            return(
+              <div key={i} style={{padding:"11px 0",borderBottom:`1px solid ${C.border}`}}>
+                <div style={{display:"flex",gap:11,alignItems:"flex-start"}}>
+                  {/* Inline thumbnail */}
+                  <div style={{width:60,height:44,borderRadius:8,overflow:"hidden",flexShrink:0,border:`1px solid ${C.border}`,position:"relative"}}>
+                    <Photo sector={sector} idx={p.imgIdx||0} style={{position:"absolute",inset:0}} alt={sector}/>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:4}}>
+                      <span style={{fontSize:12,color:C.text,fontWeight:600}}>{p.platform} · {p.type}</span>
+                      <Tag color={recColor}>{p.rec}</Tag>
+                    </div>
+                    <ScoreBar score={p.score}/>
+                    <div style={{fontSize:11,color:C.muted,marginTop:3}}>{p.reach} reach · {p.eng} · CTR {p.ctr}</div>
+                    <button className="btn" style={{marginTop:5,fontSize:10,padding:"3px 9px"}} onClick={()=>setViewPost(p)}>View Details</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="card">
+          <div style={{fontWeight:700,color:C.text,marginBottom:14}}>Agent Activity</div>
+          {[
+            {agent:"Aria",    a:`Generated ${sector} content for TikTok, IG & Facebook`,  t:"2m",color:C.blue},
+            {agent:"Maverick",a:"Contacted fresh ad lead — responded in under 2 min",      t:"14m",color:C.purple},
+            {agent:"Echo",    a:"Responding to 1-star review, de-escalating",               t:"1h",color:C.green},
+            {agent:"Maverick",a:"Re-engaged cold lead after 6 months — booked follow-up",  t:"3h",color:C.purple},
+            {agent:"Aria",    a:"Boosted TikTok post — virality score hit 98",              t:"5h",color:C.blue},
+          ].map((a,i)=>(
+            <div key={i} style={{display:"flex",gap:9,padding:"9px 0",borderBottom:`1px solid ${C.border}`,alignItems:"flex-start"}}>
+              <Dot color={a.color} pulse/>
+              <div style={{flex:1,minWidth:0}}>
+                <span style={{fontSize:11,color:a.color,fontWeight:700}}>{a.agent}</span>
+                <p style={{fontSize:12,color:C.muted,lineHeight:1.5,marginTop:1}}>{a.a}</p>
+              </div>
+              <span className="mono" style={{fontSize:10,color:C.dim,flexShrink:0}}>{a.t} ago</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ONBOARDING ─────────────────────────────────── */
+/* ─── BUSINESS INFO STEP ─────────────────────────── */
+function BusinessInfoStep({user, onDone}){
+  const [bizName,setBizName] = useState("");
+  const [website,setWebsite] = useState("");
+  const [phone,setPhone] = useState("");
+  const [city,setCity] = useState("");
+  const [sector,setSector] = useState(null);
+  const [desc,setDesc] = useState("");
+
+  const proceed = () => { onDone({ bizName, website, phone, city, sector, desc }); };
+  const filled = sector !== null;
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#F0F3FF 0%,#F8F4FF 50%,#FFF4F8 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",overflowX:"hidden"}}>
+      <style>{G}</style>
+      <div style={{width:"100%",maxWidth:580}} className="fade">
+        {/* Progress bar */}
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:32,justifyContent:"center",flexWrap:"wrap"}}>
+          {["Account","Business Info","Your Plan","Agents"].map((step,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <div style={{width:24,height:24,borderRadius:"50%",background:i===1?C.grad:i<1?"#18B96A":"#E2E6EF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{i<1?"✓":i+1}</div>
+                <span style={{fontSize:12,fontWeight:i===1?700:500,color:i===1?C.purple:i<1?C.green:C.muted,whiteSpace:"nowrap"}}>{step}</span>
+              </div>
+              {i<3&&<div style={{width:20,height:1,background:i<1?C.green:C.border}}/>}
+            </div>
+          ))}
+        </div>
+
+        <div style={{background:"#fff",borderRadius:20,padding:32,boxShadow:"0 8px 40px rgba(100,80,200,.12)"}}>
+          <div style={{marginBottom:24}}>
+            <h2 style={{fontWeight:900,fontSize:24,color:C.text,marginBottom:6}}>Tell us about your business</h2>
+            <p style={{fontSize:13,color:C.muted,lineHeight:1.6}}>ProMetra uses this to personalize all content, leads, and agent responses to your specific business.</p>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:16,marginBottom:20}}>
+            <div>
+              <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Business Name</label>
+              <input className="inp" value={bizName} onChange={e=>setBizName(e.target.value)} placeholder="e.g. ProDetail NJ"/>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Website (optional)</label>
+              <input className="inp" value={website} onChange={e=>setWebsite(e.target.value)} placeholder="https://yoursite.com"/>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Phone Number (optional)</label>
+              <input className="inp" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="(732) 555-0000"/>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>City / Service Area</label>
+              <input className="inp" value={city} onChange={e=>setCity(e.target.value)} placeholder="e.g. Monmouth County, NJ"/>
+            </div>
+          </div>
+
+          <div style={{marginBottom:20}}>
+            <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Business Niche <span style={{color:C.red}}>*</span></label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {SECTORS.map(s=>(
+                <button key={s} className="btn" onClick={()=>setSector(s)}
+                  style={sector===s?{borderColor:C.purple,color:C.purple,background:C.purple+"0F",fontWeight:700}:{}}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{marginBottom:24}}>
+            <label style={{fontSize:11,color:C.muted,display:"block",marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em"}}>Short Business Description (optional)</label>
+            <textarea className="inp" value={desc} onChange={e=>setDesc(e.target.value)}
+              placeholder="e.g. Premium mobile auto detailing serving Monmouth County NJ. Specializing in ceramic coatings and full detail packages."
+              rows={3} style={{resize:"vertical",lineHeight:1.6}}/>
+          </div>
+
+          <button className="btn-p" disabled={!filled} onClick={proceed} style={{width:"100%",padding:"14px",fontSize:15,borderRadius:11}}>
+            Continue — Choose Your Plan →
+          </button>
+          {!filled&&<p style={{fontSize:11,color:C.muted,textAlign:"center",marginTop:10}}>Select a business niche to continue</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Onboard({onDone, preSector}){
+  const [stage,setStage]=useState(preSector ? 1 : 0);
+  const [sector,setSector]=useState(preSector || null);
+  const [plan,setPlanL]=useState(null);
+  const [agentId,setAgentId]=useState(null);
+
+  const wrap=c=>(
+    <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#F0F3FF 0%,#F8F4FF 50%,#FFF4F8 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",overflowX:"hidden"}}>
+      <style>{G}</style>{c}
+    </div>
+  );
+
+  if(stage===0)return wrap(
+    <div style={{maxWidth:500,width:"100%",textAlign:"center"}} className="fade">
+      <div style={{display:"inline-flex",alignItems:"center",gap:12,marginBottom:28}}>
+        <div style={{width:36,height:36,borderRadius:10,background:C.grad,flexShrink:0}}/>
+        <div style={{fontWeight:900,fontSize:24,background:C.grad,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>ProMetra</div>
+      </div>
+      <h1 style={{fontWeight:900,fontSize:"clamp(24px,5vw,44px)",color:C.text,lineHeight:1.1,marginBottom:12}}>Replace your entire marketing team.</h1>
+      <p style={{fontSize:14,color:C.muted,lineHeight:1.75,marginBottom:32}}>Social media, lead gen, and reputation management — all AI-powered from <strong style={{color:C.text}}>$299.99/mo</strong>. <span style={{color:C.green}}>7-day free trial.</span></p>
+      <div style={{textAlign:"left",marginBottom:24}}>
+        <p style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:".1em",marginBottom:10,textTransform:"uppercase"}}>Your industry</p>
+        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+          {SECTORS.map(s=><button key={s} className="btn" onClick={()=>setSector(s)} style={sector===s?{borderColor:C.purple,color:C.purple,background:C.purple+"11"}:{}}>{s}</button>)}
+        </div>
+      </div>
+      <button className="btn-p" disabled={!sector} onClick={()=>setStage(1)} style={{width:"100%",padding:"13px",fontSize:15}}>Start Free Trial</button>
+    </div>
+  );
+
+  if(stage===1)return wrap(
+    <div style={{maxWidth:700,width:"100%"}} className="fade">
+      <button className="btn" style={{marginBottom:20}} onClick={()=>setStage(0)}>Back</button>
+      <h2 style={{fontWeight:900,fontSize:"clamp(22px,4vw,28px)",color:C.text,marginBottom:6}}>Choose your plan</h2>
+      <p style={{color:C.muted,marginBottom:20}}>For your <strong style={{color:C.text}}>{sector}</strong> business — 7-day free trial included.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:16}}>
+        {Object.entries(PLANS).map(([k,p])=>(
+          <div key={k} onClick={()=>setPlanL(k)} style={{border:`1.5px solid ${plan===k?p.color:C.border}`,borderRadius:12,padding:18,cursor:"pointer",background:plan===k?p.color+"0D":C.surface,transition:"all .2s"}}>
+            <Tag color={p.color}>{p.tag}</Tag>
+            <div style={{fontWeight:800,fontSize:16,color:C.text,marginTop:10,marginBottom:3}}>{p.name}</div>
+            <div className="mono" style={{fontSize:18,color:p.color,marginBottom:10}}>{p.price}{p.price!=="Custom"&&<span style={{fontSize:10,color:C.muted}}>/mo</span>}</div>
+            {p.features.map((f,i)=><div key={i} style={{display:"flex",gap:7,marginBottom:4,alignItems:"center"}}><Dot color={p.color}/><span style={{fontSize:11,color:C.muted}}>{f}</span></div>)}
+          </div>
+        ))}
+      </div>
+      <button className="btn-p" disabled={!plan} onClick={()=>setStage(2)} style={{width:"100%",padding:"13px",fontSize:15}}>Choose Agents</button>
+    </div>
+  );
+
+  return wrap(
+    <div style={{maxWidth:580,width:"100%"}} className="fade">
+      <button className="btn" style={{marginBottom:20}} onClick={()=>setStage(1)}>Back</button>
+      <h2 style={{fontWeight:900,fontSize:"clamp(22px,4vw,28px)",color:C.text,marginBottom:6}}>Your AI Agents</h2>
+      <p style={{color:C.muted,marginBottom:20}}>Trained for <strong style={{color:C.text}}>{sector}</strong>.</p>
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+        {AGENTS.map(a=>{
+          const locked=plan==="social"&&a.id!=="social";
+          const isSel=agentId===a.id;
+          return(
+            <div key={a.id} onClick={()=>!locked&&setAgentId(a.id)} style={{border:`1.5px solid ${isSel?a.color:C.border}`,borderRadius:12,padding:16,cursor:locked?"not-allowed":"pointer",opacity:locked?.35:1,background:isSel?a.color+"0D":C.surface,display:"flex",gap:14,alignItems:"center",transition:"all .2s"}}>
+              <div style={{width:40,height:40,borderRadius:11,background:a.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:a.color,flexShrink:0}}>{a.name[0]}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap",marginBottom:3}}>
+                  <span style={{fontWeight:800,fontSize:15,color:C.text}}>{a.name}</span>
+                  <Tag color={a.color}>{a.role}</Tag>
+                  {locked&&<Tag color={C.muted}>Upgrade</Tag>}
+                </div>
+                <p style={{fontSize:12,color:C.muted,lineHeight:1.6}}>{a.desc}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <button className="btn-p" disabled={!agentId} onClick={()=>onDone(sector,plan,agentId)} style={{width:"100%",padding:"13px",fontSize:15}}>Launch Dashboard</button>
+    </div>
+  );
+}
+
+/* ─── ROOT APP ───────────────────────────────────── */
+function App(){
+  const [authDone,setAuthDone]=useState(false);
+  const [user,setUser]=useState(null);
+  const [bizInfo,setBizInfo]=useState(null);  // business info step
+  const [ready,setReady]=useState(false);
+  const [sector,setSector]=useState(null);
+  const [plan,setPlan]=useState(null);
+  const [agentId,setAgentId]=useState(null);
+  const [nav,setNav]=useState("dashboard");
+  const [showSettings,setShowSettings]=useState(false);
+  const [sidebarOpen,setSidebarOpen]=useState(false);
+
+  // Step 1: Auth (any input passes)
+  if(!authDone) return <AuthPage onAuth={(u)=>{setUser(u);setAuthDone(true);}}/>;
+
+  // Step 2: Business info + niche (new step)
+  if(!bizInfo) return <BusinessInfoStep user={user} onDone={(info)=>{setBizInfo(info);setSector(info.sector);}}/>;
+
+  // Step 3: Plan + agent onboarding (sector pre-filled from bizInfo)
+  if(!ready) return <Onboard preSector={bizInfo.sector} onDone={(s,p,a)=>{setSector(s);setPlan(p);setAgentId(a);setReady(true);}}/>;
+
+  const canAccess=n=>!n.locked||!n.locked.includes(plan);
+
+  return(
+    <div style={{display:"flex",height:"100vh",background:C.bg,overflow:"hidden"}}>
+      <style>{G}</style>
+      <ToastProvider/>
+
+      {showSettings&&(
+        <SettingsModal sector={sector} plan={plan} onClose={()=>setShowSettings(false)}
+          onSave={(s,p)=>{setSector(s);setPlan(p);setShowSettings(false);}}/>
+      )}
+
+      {/* Mobile overlay */}
+      {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:800}}/>}
+
+      {/* SIDEBAR */}
+      <div className={`sidebar${sidebarOpen?" open":""}`}
+        style={{width:196,minWidth:196,background:C.surface,borderRight:`1px solid ${C.border}`,padding:"18px 9px",display:"flex",flexDirection:"column",flexShrink:0,height:"100vh",overflowY:"auto",zIndex:850}}>
+        <div style={{padding:"0 5px",marginBottom:20}}>
+          <div style={{fontWeight:900,fontSize:17,background:C.grad,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>ProMetra</div>
+          <div className="mono" style={{fontSize:9,color:C.muted,marginTop:1,letterSpacing:".08em"}}>{PLANS[plan]?.tag?.toUpperCase()} PLAN</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:2,flex:1}}>
+          {NAV.map(n=>(
+            <div key={n.id} className={`nav-item${nav===n.id?" active":""}${!canAccess(n)?" locked":""}`}
+              onClick={()=>{if(canAccess(n)){setNav(n.id);setSidebarOpen(false);}}}>
+              {n.label}
+              {!canAccess(n)&&<span style={{marginLeft:"auto",fontSize:9,color:C.dim}}>locked</span>}
+            </div>
+          ))}
+        </div>
+        <div style={{paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+          <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:".1em",marginBottom:7,padding:"0 3px",textTransform:"uppercase"}}>Agents</div>
+          {AGENTS.filter(a=>plan==="enterprise"||(plan==="growth"&&a.id!=="review")||(plan==="social"&&a.id==="social")).map(a=>(
+            <div key={a.id} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 3px",marginBottom:2}}>
+              <Dot color={a.color} pulse/><span style={{fontSize:11,color:C.muted}}>{a.name}</span>
+              <span style={{fontSize:9,color:a.color,marginLeft:"auto"}}>live</span>
+            </div>
+          ))}
+          <div style={{fontSize:10,color:C.muted,marginTop:10,padding:"0 3px",marginBottom:4}}>
+            {user?.name&&<span>Hi, <strong style={{color:C.text}}>{user.name.split(" ")[0]}</strong></span>}
+          </div>
+          <button className="btn" style={{width:"100%",fontSize:11,padding:"6px"}} onClick={()=>setShowSettings(true)}>Settings</button>
+        </div>
+      </div>
+
+      {/* MAIN */}
+      <div className="main-wrap" style={{flex:1,overflowY:"auto",overflowX:"hidden",minWidth:0,height:"100vh"}}>
+        {/* Mobile header */}
+        <div className="mob-header">
+          <button onClick={()=>setSidebarOpen(true)} style={{background:"none",border:`1px solid ${C.borderHi}`,borderRadius:7,padding:"7px 10px",cursor:"pointer",color:C.muted,display:"flex",flexDirection:"column",gap:4}}>
+            <div style={{width:16,height:2,background:C.muted,borderRadius:2}}/>
+            <div style={{width:16,height:2,background:C.muted,borderRadius:2}}/>
+            <div style={{width:16,height:2,background:C.muted,borderRadius:2}}/>
+          </button>
+          <div style={{fontWeight:900,fontSize:16,background:C.grad,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>ProMetra</div>
+          <div style={{flex:1}}/>
+          <button className="btn" style={{fontSize:11,padding:"5px 10px"}} onClick={()=>setShowSettings(true)}>Settings</button>
+        </div>
+
+        <div style={{padding:"clamp(14px,2.5vw,32px)"}}>
+          {nav==="dashboard"&&<Dashboard sector={sector} plan={plan} agentId={agentId} onOpenSettings={()=>setShowSettings(true)}/>}
+          {nav==="studio"   &&<StudioSection sector={sector}/>}
+          {nav==="leads"    &&<LeadsSection sector={sector}/>}
+          {nav==="reviews"  &&<ReviewsSection sector={sector}/>}
+          {nav==="analytics"&&<AnalyticsSection sector={sector}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+  </script>
+</body>
+</html>
